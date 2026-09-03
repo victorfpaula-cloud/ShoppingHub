@@ -1,0 +1,13 @@
+{
+  "name": "ShoppingHub",
+  "short_name": "ShoppingHub",
+  "description": "Atendimento virtual de shopping centers via Instagram Direct",
+  "start_url": "/shoppings",
+  "display": "standalone",
+  "background_color": "#171717",
+  "theme_color": "#171717",
+  "icons": [
+    { "src": "/icon.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/apple-icon.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

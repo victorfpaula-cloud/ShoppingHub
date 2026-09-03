@@ -1,0 +1,187 @@
+import crypto from "node:crypto";
+
+const GRAPH_API_VERSION = "v21.0";
+
+/**
+ * Confere a assinatura X-Hub-Signature-256 que a Meta manda em todo webhook, calculada em cima
+ * do corpo BRUTO (raw) da requisição usando o App Secret como chave HMAC-SHA256. Isso garante
+ * que a chamada realmente veio da Meta, e não de qualquer um que descubra a URL do webhook.
+ * Comparação em tempo constante (timingSafeEqual) pra não vazar informação por tempo de resposta.
+ */
+export function assinaturaValida(corpoBruto: string, assinaturaRecebida: string | null): boolean {
+  const appSecret = process.env.META_APP_SECRET;
+
+  if (!appSecret || !assinaturaRecebida) return false;
+
+  const esperada =
+    "sha256=" + crypto.createHmac("sha256", appSecret).update(corpoBruto, "utf8").digest("hex");
+
+  const bufferEsperado = Buffer.from(esperada, "utf8");
+  const bufferRecebido = Buffer.from(assinaturaRecebida, "utf8");
+
+  return (
+    bufferEsperado.length === bufferRecebido.length &&
+    crypto.timingSafeEqual(bufferEsperado, bufferRecebido)
+  );
+}
+
+/**
+ * Envia uma mensagem de texto pro Direct de um cliente, usando o token de acesso da Página
+ * conectada. O endpoint oficial é `/me/messages` (a Meta resolve pra Página certa a partir do
+ * próprio token) — não `/{page-id}/messages`, confirmado na documentação da Instagram Messaging
+ * API.
+ */
+export async function enviarMensagemDirect(
+  tokenDaConta: string,
+  igsidDoCliente: string,
+  texto: string
+): Promise<void> {
+  const resposta = await fetch(
+    `https://graph.facebook.com/${GRAPH_API_VERSION}/me/messages?access_token=${encodeURIComponent(
+      tokenDaConta
+    )}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        recipient: { id: igsidDoCliente },
+        message: { text: texto },
+      }),
+      cache: "no-store",
+    }
+  );
+
+  if (!resposta.ok) {
+    const corpoErro = await resposta.text().catch(() => "");
+    throw new Error(
+      `Falha ao enviar mensagem pro Direct (status ${resposta.status}): ${corpoErro}`
+    );
+  }
+}
+
+/**
+ * Busca nome e @usuário do Instagram de quem mandou a mensagem — guardado junto com a mensagem
+ * recebida (ver shoppinghub_mensagens) pra aparecer no relatório de atendimentos. Se a chamada
+ * falhar por qualquer motivo, devolve nome genérico em vez de derrubar o processamento da
+ * mensagem por causa disso.
+ */
+export async function buscarPerfilDoCliente(
+  tokenDaConta: string,
+  instagramScopedId: string
+): Promise<{ nome: string; username: string | null }> {
+  try {
+    const resposta = await fetch(
+      `https://graph.facebook.com/${GRAPH_API_VERSION}/${instagramScopedId}?fields=name,username&access_token=${encodeURIComponent(
+        tokenDaConta
+      )}`,
+      { cache: "no-store" }
+    );
+
+    if (!resposta.ok) return { nome: "Cliente", username: null };
+
+    const dados = await resposta.json();
+    return {
+      nome: typeof dados?.name === "string" && dados.name ? dados.name : "Cliente",
+      username: typeof dados?.username === "string" ? dados.username : null,
+    };
+  } catch (erro) {
+    console.error("Falha ao buscar perfil do cliente no Instagram:", erro);
+    return { nome: "Cliente", username: null };
+  }
+}
+
+/**
+ * Baixa a mídia de uma menção de Story a partir do `payload.url` que a Meta manda no webhook —
+ * esse link é temporário, então precisa ser baixado e guardado em algum storage nosso (Supabase
+ * Storage) assim que o evento chega, antes que expire.
+ */
+export async function baixarMidiaDoStory(
+  url: string
+): Promise<{ bytes: Uint8Array; contentType: string } | null> {
+  try {
+    const resposta = await fetch(url, { cache: "no-store" });
+    if (!resposta.ok) return null;
+
+    const contentType = resposta.headers.get("content-type") ?? "application/octet-stream";
+    const bytes = new Uint8Array(await resposta.arrayBuffer());
+    return { bytes, contentType };
+  } catch (erro) {
+    console.error("Falha ao baixar mídia de menção de Story:", erro);
+    return null;
+  }
+}
+
+/**
+ * Publica uma Story na conta do Instagram do shopping, em duas etapas conforme a documentação
+ * oficial da Meta (Content Publishing API): cria um container de mídia com
+ * `media_type=STORIES` + `image_url`/`video_url` (precisa ser uma URL pública, por isso a mídia
+ * baixada do story_mention é reenviada primeiro pro Supabase Storage), depois publica o container
+ * já criado. Devolve o ID do story publicado — é esse ID que mais tarde bate com
+ * `reply_to.story.id` na hora de rotear a resposta do cliente pra loja certa.
+ */
+export async function publicarStoryNoInstagram(
+  tokenDaConta: string,
+  instagramUserId: string,
+  urlPublicaDaMidia: string,
+  tipoDeMidia: "IMAGE" | "VIDEO"
+): Promise<string> {
+  const camposDeMidia =
+    tipoDeMidia === "VIDEO" ? { video_url: urlPublicaDaMidia } : { image_url: urlPublicaDaMidia };
+
+  const respostaContainer = await fetch(
+    `https://graph.facebook.com/${GRAPH_API_VERSION}/${instagramUserId}/media`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        media_type: "STORIES",
+        ...camposDeMidia,
+        access_token: tokenDaConta,
+      }),
+      cache: "no-store",
+    }
+  );
+
+  if (!respostaContainer.ok) {
+    const corpoErro = await respostaContainer.text().catch(() => "");
+    throw new Error(
+      `Falha ao criar container de Story (status ${respostaContainer.status}): ${corpoErro}`
+    );
+  }
+
+  const dadosContainer = await respostaContainer.json();
+  const containerId = dadosContainer?.id as string | undefined;
+
+  if (!containerId) {
+    throw new Error("A Meta não devolveu um ID de container ao criar a Story.");
+  }
+
+  const respostaPublicacao = await fetch(
+    `https://graph.facebook.com/${GRAPH_API_VERSION}/${instagramUserId}/media_publish`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        creation_id: containerId,
+        access_token: tokenDaConta,
+      }),
+      cache: "no-store",
+    }
+  );
+
+  if (!respostaPublicacao.ok) {
+    const corpoErro = await respostaPublicacao.text().catch(() => "");
+    throw new Error(
+      `Falha ao publicar Story (status ${respostaPublicacao.status}): ${corpoErro}`
+    );
+  }
+
+  const dadosPublicacao = await respostaPublicacao.json();
+  const storyMediaId = dadosPublicacao?.id as string | undefined;
+
+  if (!storyMediaId) {
+    throw new Error("A Meta não devolveu um ID de mídia ao publicar a Story.");
+  }
+
+  return storyMediaId;
+}

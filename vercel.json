@@ -1,0 +1,6 @@
+{
+  "crons": [
+    { "path": "/api/cron/publicar-mencoes", "schedule": "0 15 * * *" },
+    { "path": "/api/cron/publicar-mencoes", "schedule": "0 21 * * *" }
+  ]
+}

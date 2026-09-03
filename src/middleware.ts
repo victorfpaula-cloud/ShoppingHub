@@ -1,0 +1,58 @@
+import { createServerClient } from "@supabase/ssr";
+import { NextResponse, type NextRequest } from "next/server";
+
+/**
+ * Exige login em todo o painel administrativo (shoppings, lojas, guardrails, fila de menções,
+ * relatórios) — só o webhook do Instagram e o endpoint de cron ficam de fora, porque quem chama
+ * eles não é um navegador com sessão (a própria Meta, e a Vercel, respectivamente).
+ *
+ * Falha "aberta" (deixa passar sem exigir login) só se faltar configurar a variável de ambiente
+ * `NEXT_PUBLIC_SUPABASE_ANON_KEY` — evita que um esquecimento de configuração derrube o site
+ * inteiro com uma tela em branco; ainda assim registra um erro no log pra não passar despercebido.
+ */
+export async function middleware(request: NextRequest) {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const chaveAnonima = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!url || !chaveAnonima) {
+    console.error(
+      "NEXT_PUBLIC_SUPABASE_ANON_KEY não configurada — login desativado temporariamente."
+    );
+    return NextResponse.next();
+  }
+
+  let response = NextResponse.next({ request });
+
+  const supabase = createServerClient(url, chaveAnonima, {
+    cookies: {
+      getAll() {
+        return request.cookies.getAll();
+      },
+      setAll(cookiesToSet) {
+        cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+        response = NextResponse.next({ request });
+        cookiesToSet.forEach(({ name, value, options }) =>
+          response.cookies.set(name, value, options)
+        );
+      },
+    },
+  });
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user && request.nextUrl.pathname !== "/login") {
+    const destino = request.nextUrl.clone();
+    destino.pathname = "/login";
+    return NextResponse.redirect(destino);
+  }
+
+  return response;
+}
+
+export const config = {
+  matcher: [
+    "/((?!api/webhook/instagram|api/cron|_next/static|_next/image|favicon.ico|icon.png|apple-icon.png).*)",
+  ],
+};
