@@ -13,10 +13,18 @@ const GRAPH_API_VERSION = "v21.0";
 //
 // "pages_messaging" também é obrigatório — sem ele o Facebook recusa a inscrição da Página pra
 // receber o campo "messages" no webhook.
+//
+// "business_management" foi adicionado em 04/09/2026 — a própria Meta lista essa permissão como
+// obrigatória em "Casos de uso > API do Instagram > Enviar mensagens no Instagram", mas ela não
+// estava sendo pedida no diálogo de login. Sem ela, a Página aparecia "inscrita" no webhook
+// (subscribed_apps confirmava), mas nenhuma mensagem/menção de Story real chegava de verdade —
+// só o token de acesso do usuário não estava completo o suficiente pro Instagram liberar a
+// entrega de mensagens em produção.
 const ESCOPOS = [
   "pages_show_list",
   "pages_read_engagement",
   "pages_messaging",
+  "business_management",
   "instagram_basic",
   "instagram_manage_messages",
   "instagram_content_publish",
