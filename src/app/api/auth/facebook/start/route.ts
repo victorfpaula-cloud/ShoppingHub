@@ -36,5 +36,8 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  return NextResponse.redirect(montarUrlDeAutorizacao(state));
+  const urlDeAutorizacao = montarUrlDeAutorizacao(state);
+  console.log("montarUrlDeAutorizacao — URL gerada:", urlDeAutorizacao);
+
+  return NextResponse.redirect(urlDeAutorizacao);
 }

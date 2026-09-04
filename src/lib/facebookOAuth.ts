@@ -24,7 +24,10 @@ const ESCOPOS = [
 
 function urlBaseDoApp(): string {
   // Domínio fixo do projeto na Vercel (não muda entre deploys, diferente da URL com hash).
-  return process.env.NEXT_PUBLIC_APP_URL ?? "https://shoppinghub.vercel.app";
+  // Remove barra final — se a variável de ambiente vier com "/" no fim, gera barra dupla na
+  // redirect_uri e o Facebook recusa por não bater com a que foi usada no diálogo de OAuth.
+  const base = process.env.NEXT_PUBLIC_APP_URL ?? "https://shoppinghub.vercel.app";
+  return base.replace(/\/+$/, "");
 }
 
 export function urlDeCallback(): string {
@@ -44,10 +47,13 @@ export function montarUrlDeAutorizacao(state: string): string {
 }
 
 export async function trocarCodigoPorToken(codigo: string): Promise<string> {
+  const redirectUri = urlDeCallback();
+  console.log("trocarCodigoPorToken — redirect_uri usada:", redirectUri);
+
   const params = new URLSearchParams({
     client_id: process.env.META_APP_ID ?? "",
     client_secret: process.env.META_APP_SECRET ?? "",
-    redirect_uri: urlDeCallback(),
+    redirect_uri: redirectUri,
     code: codigo,
   });
 
