@@ -2,13 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { criarClienteAdmin } from "@/lib/supabase/admin";
 import {
   assinaturaValida,
-  baixarMidiaDoStory,
   buscarPerfilDoCliente,
   enviarMensagemDirect,
 } from "@/lib/metaMessaging";
 import { decidirLoja, responderComoLoja, type LojaComConhecimento } from "@/lib/triagem";
-import { inicioDoDiaBrasiliaISO, subirMidiaDeMencao } from "@/lib/mencoes";
-import { adicionarFaixaDeCredito, ehImagem } from "@/lib/creditoNaImagem";
+import { processarMencaoRecebida } from "@/lib/mencoes";
 
 const CAMPOS_DA_LOJA =
   "id, nome, eh_geral, endereco, telefone, email, horario_atendimento, responsavel, base_conhecimento_texto";
@@ -269,9 +267,11 @@ async function processarEventoDeMensagem(admin: ReturnType<typeof criarClienteAd
 }
 
 /**
- * Caso (b) do webhook — ver comentário acima de onde essa função é chamada. Segue os passos 2-5
- * do fluxo descrito no README: resolve o @usuário de quem marcou, bate contra uma loja cadastrada
- * nesse shopping, confere o limite diário, baixa a mídia do story e entra na fila.
+ * Caso (b) do webhook — ver comentário acima de onde essa função é chamada. Resolve o @usuário de
+ * quem marcou (só a Meta manda o IGSID no webhook direto, por isso o `buscarPerfilDoCliente` fica
+ * aqui e não em `processarMencaoRecebida`) e delega o resto do fluxo (loja autorizada, limite
+ * diário, download da mídia, faixa de crédito) pra função compartilhada com a ponte do SendPulse —
+ * ver `src/lib/mencoes.ts`.
  */
 async function processarMencaoDeStory(
   admin: ReturnType<typeof criarClienteAdmin>,
@@ -294,87 +294,5 @@ async function processarMencaoDeStory(
     return;
   }
 
-  const { data: lojasDoShopping } = await admin
-    .from("shoppinghub_lojas")
-    .select("id, limite_diario_mencoes, ativo, instagram_username, instagram_username_2")
-    .eq("shopping_id", conta.shopping_id);
-
-  const loja = (lojasDoShopping ?? []).find(
-    (l) =>
-      l.instagram_username?.toLowerCase() === username ||
-      l.instagram_username_2?.toLowerCase() === username
-  );
-
-  if (!loja || !loja.ativo) {
-    console.warn(
-      `Menção de Story de @${username} não bate com nenhuma loja autorizada nesse shopping — descartada.`
-    );
-    return;
-  }
-
-  const inicioDoDia = inicioDoDiaBrasiliaISO();
-  const { count: mencoesHoje } = await admin
-    .from("shoppinghub_mencoes")
-    .select("id", { count: "exact", head: true })
-    .eq("loja_id", loja.id)
-    .neq("status", "descartado_limite")
-    .gte("recebido_em", inicioDoDia);
-
-  if ((mencoesHoje ?? 0) >= loja.limite_diario_mencoes) {
-    // Registrado (não só ignorado) pra dar visibilidade na fila de menções — ver
-    // src/app/shoppings/[id]/mencoes/page.tsx.
-    await admin.from("shoppinghub_mencoes").insert({
-      conta_id: conta.id,
-      loja_id: loja.id,
-      instagram_scoped_id: idDoCliente,
-      status: "descartado_limite",
-    });
-    return;
-  }
-
-  const { data: mencaoCriada, error: erroAoCriarMencao } = await admin
-    .from("shoppinghub_mencoes")
-    .insert({
-      conta_id: conta.id,
-      loja_id: loja.id,
-      instagram_scoped_id: idDoCliente,
-      instagram_username: username,
-      status: "pendente",
-    })
-    .select("id")
-    .single();
-
-  if (erroAoCriarMencao || !mencaoCriada) {
-    console.error("Falha ao registrar menção de Story na fila:", erroAoCriarMencao);
-    return;
-  }
-
-  const midia = await baixarMidiaDoStory(urlDoStory);
-
-  if (!midia) {
-    await admin.from("shoppinghub_mencoes").update({ status: "erro" }).eq("id", mencaoCriada.id);
-    return;
-  }
-
-  try {
-    // Dá crédito à loja sobrepondo uma faixa com o @usuário dela no rodapé da imagem, antes de
-    // guardar — só funciona pra imagem (vídeo publica sem a faixa, ver comentário na função).
-    const midiaFinal = ehImagem(midia.contentType)
-      ? await adicionarFaixaDeCredito(midia.bytes, username)
-      : midia;
-
-    const { storagePath } = await subirMidiaDeMencao(
-      admin,
-      mencaoCriada.id,
-      midiaFinal.bytes,
-      midiaFinal.contentType
-    );
-    await admin
-      .from("shoppinghub_mencoes")
-      .update({ storage_path: storagePath })
-      .eq("id", mencaoCriada.id);
-  } catch (erro) {
-    console.error("Falha ao subir mídia de menção de Story pro Storage:", erro);
-    await admin.from("shoppinghub_mencoes").update({ status: "erro" }).eq("id", mencaoCriada.id);
-  }
+  await processarMencaoRecebida(admin, conta, idDoCliente, username, urlDoStory);
 }
