@@ -95,6 +95,18 @@ async function publicarMencao(
       status: "publicado",
       publicado_em: new Date().toISOString(),
       story_media_id: storyMediaId,
+      storage_path: null,
     })
     .eq("id", mencao.id);
+
+  // Já publicou de verdade (storyMediaId confirma que a Meta recebeu a mídia) — não tem motivo
+  // pra continuar guardando o arquivo aqui. O registro em shoppinghub_mencoes (loja, horário,
+  // status) já serve de log/auditoria sem precisar acumular mídia no Storage.
+  const { error: erroAoApagar } = await admin.storage
+    .from(BUCKET_MENCOES)
+    .remove([mencao.storage_path]);
+
+  if (erroAoApagar) {
+    console.error(`Falha ao apagar mídia publicada (menção ${mencao.id}):`, erroAoApagar);
+  }
 }
