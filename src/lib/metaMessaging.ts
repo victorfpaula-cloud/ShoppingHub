@@ -11,7 +11,14 @@ const GRAPH_API_VERSION = "v21.0";
 export function assinaturaValida(corpoBruto: string, assinaturaRecebida: string | null): boolean {
   const appSecret = process.env.META_APP_SECRET;
 
-  if (!appSecret || !assinaturaRecebida) return false;
+  if (!appSecret) {
+    console.warn("assinaturaValida: META_APP_SECRET não configurada.");
+    return false;
+  }
+  if (!assinaturaRecebida) {
+    console.warn("assinaturaValida: requisição sem header x-hub-signature-256.");
+    return false;
+  }
 
   const esperada =
     "sha256=" + crypto.createHmac("sha256", appSecret).update(corpoBruto, "utf8").digest("hex");
@@ -19,10 +26,21 @@ export function assinaturaValida(corpoBruto: string, assinaturaRecebida: string 
   const bufferEsperado = Buffer.from(esperada, "utf8");
   const bufferRecebido = Buffer.from(assinaturaRecebida, "utf8");
 
-  return (
+  const valida =
     bufferEsperado.length === bufferRecebido.length &&
-    crypto.timingSafeEqual(bufferEsperado, bufferRecebido)
-  );
+    crypto.timingSafeEqual(bufferEsperado, bufferRecebido);
+
+  if (!valida) {
+    // Log temporário de diagnóstico — nenhum dos dois valores aqui permite recuperar o App
+    // Secret, só serve pra comparar visualmente o que a Meta mandou vs o que calculamos.
+    console.warn("assinaturaValida: assinatura não bateu.", {
+      esperada,
+      recebida: assinaturaRecebida,
+      tamanhoDoCorpo: corpoBruto.length,
+    });
+  }
+
+  return valida;
 }
 
 /**
