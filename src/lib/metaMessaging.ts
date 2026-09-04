@@ -140,15 +140,25 @@ export async function baixarMidiaDoStory(
  * baixada do story_mention é reenviada primeiro pro Supabase Storage), depois publica o container
  * já criado. Devolve o ID do story publicado — é esse ID que mais tarde bate com
  * `reply_to.story.id` na hora de rotear a resposta do cliente pra loja certa.
+ *
+ * `usernameParaMarcar`, quando informado, usa o campo `user_tags` (suportado pra Stories de
+ * imagem e vídeo desde 09/07/2025) pra criar uma marcação clicável de verdade da loja que gerou a
+ * menção — {x, y} é só a posição da marcação na mídia (0.0–1.0, a partir do canto superior
+ * esquerdo); 0.5/0.92 deixa perto do rodapé, sem atrapalhar o conteúdo.
  */
 export async function publicarStoryNoInstagram(
   tokenDaConta: string,
   instagramUserId: string,
   urlPublicaDaMidia: string,
-  tipoDeMidia: "IMAGE" | "VIDEO"
+  tipoDeMidia: "IMAGE" | "VIDEO",
+  usernameParaMarcar?: string | null
 ): Promise<string> {
   const camposDeMidia =
     tipoDeMidia === "VIDEO" ? { video_url: urlPublicaDaMidia } : { image_url: urlPublicaDaMidia };
+
+  const camposDeMarcacao = usernameParaMarcar
+    ? { user_tags: JSON.stringify([{ username: usernameParaMarcar, x: 0.5, y: 0.92 }]) }
+    : {};
 
   const respostaContainer = await fetch(
     `https://graph.facebook.com/${GRAPH_API_VERSION}/${instagramUserId}/media`,
@@ -158,6 +168,7 @@ export async function publicarStoryNoInstagram(
       body: JSON.stringify({
         media_type: "STORIES",
         ...camposDeMidia,
+        ...camposDeMarcacao,
         access_token: tokenDaConta,
       }),
       cache: "no-store",

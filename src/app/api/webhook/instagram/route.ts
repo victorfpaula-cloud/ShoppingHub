@@ -312,6 +312,7 @@ async function processarMencaoDeStory(
       conta_id: conta.id,
       loja_id: loja.id,
       instagram_scoped_id: idDoCliente,
+      instagram_username: username,
       status: "pendente",
     })
     .select("id")

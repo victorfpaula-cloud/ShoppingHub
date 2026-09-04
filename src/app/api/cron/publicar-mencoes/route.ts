@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
 
   const { data: mencoesPendentes, error } = await admin
     .from("shoppinghub_mencoes")
-    .select("id, conta_id, loja_id, storage_path")
+    .select("id, conta_id, loja_id, storage_path, instagram_username")
     .eq("status", "pendente")
     .not("storage_path", "is", null)
     .order("recebido_em", { ascending: true });
@@ -54,7 +54,13 @@ export async function GET(request: NextRequest) {
 
 async function publicarMencao(
   admin: ReturnType<typeof criarClienteAdmin>,
-  mencao: { id: string; conta_id: string; loja_id: string; storage_path: string | null }
+  mencao: {
+    id: string;
+    conta_id: string;
+    loja_id: string;
+    storage_path: string | null;
+    instagram_username: string | null;
+  }
 ) {
   if (!mencao.storage_path) {
     throw new Error("Menção sem storage_path.");
@@ -79,7 +85,8 @@ async function publicarMencao(
     conta.access_token,
     conta.instagram_user_id,
     urlPublica.publicUrl,
-    tipoDeMidia
+    tipoDeMidia,
+    mencao.instagram_username
   );
 
   await admin

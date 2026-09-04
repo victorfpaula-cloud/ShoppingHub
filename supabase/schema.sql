@@ -219,6 +219,7 @@ create table if not exists shoppinghub_mencoes (
   loja_id uuid not null references shoppinghub_lojas(id) on delete cascade,
 
   instagram_scoped_id text not null, -- quem marcou (pra auditoria/debug)
+  instagram_username text, -- @usuário de quem marcou — usado pra marcar (user_tags) na republicação
   storage_path text, -- arquivo baixado do payload.url, guardado no Supabase Storage
 
   status text not null default 'pendente'
