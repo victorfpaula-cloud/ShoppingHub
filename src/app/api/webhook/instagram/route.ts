@@ -115,6 +115,34 @@ async function processarEventoDeMensagem(admin: ReturnType<typeof criarClienteAd
     return;
   }
 
+  const perfilDoCliente = await buscarPerfilDoCliente(conta.access_token, idDoCliente);
+
+  // Ignora completamente qualquer mensagem de uma conta cadastrada como @usuário autorizado de
+  // alguma loja desse shopping — essas contas são lojistas, cadastradas só pra poder marcar o
+  // shopping nos Stories deles (repostagem automática, caso b acima). Não é cliente perguntando
+  // nada, então não salva, não aciona a IA, não responde nada — sem isso o Gemini ficava tentando
+  // puxar conversa com o lojista toda vez que ele mandava um Direct qualquer.
+  const usernameDoRemetente = perfilDoCliente.username?.toLowerCase();
+  if (usernameDoRemetente) {
+    const { data: lojasDoShopping } = await admin
+      .from("shoppinghub_lojas")
+      .select("instagram_username, instagram_username_2")
+      .eq("shopping_id", conta.shopping_id);
+
+    const ehLojistaAutorizado = (lojasDoShopping ?? []).some(
+      (l) =>
+        l.instagram_username?.toLowerCase() === usernameDoRemetente ||
+        l.instagram_username_2?.toLowerCase() === usernameDoRemetente
+    );
+
+    if (ehLojistaAutorizado) {
+      console.log(
+        `Mensagem de @${usernameDoRemetente} ignorada — é lojista autorizado desse shopping, não cliente.`
+      );
+      return;
+    }
+  }
+
   // Caso (c): resposta a um Story que o próprio shopping repostou — o ID do story bate direto com
   // shoppinghub_mencoes.story_media_id, então dá pra saber a loja com certeza, sem IA adivinhando.
   const idDoStoryRespondido: string | undefined = mensagem?.reply_to?.story?.id;
@@ -136,8 +164,6 @@ async function processarEventoDeMensagem(admin: ReturnType<typeof criarClienteAd
   const historicoRecente = (mensagensAnteriores ?? [])
     .map((m) => `${m.direcao === "recebida" ? "Cliente" : "Atendimento"}: ${m.texto}`)
     .join("\n");
-
-  const perfilDoCliente = await buscarPerfilDoCliente(conta.access_token, idDoCliente);
 
   const { data: mensagemRecebida } = await admin
     .from("shoppinghub_mensagens")
