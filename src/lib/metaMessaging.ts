@@ -134,6 +134,45 @@ export async function baixarMidiaDoStory(
 }
 
 /**
+ * Depois de criar o container de mídia, a Meta baixa a imagem/vídeo da nossa URL pública de forma
+ * assíncrona — publicar antes disso terminar dá erro "Media ID is not available" (aconteceu na
+ * prática em 04/09/2026). Fica checando o `status_code` do container até virar `FINISHED` (ou
+ * `ERROR`) antes de seguir pra publicação, do jeito que a documentação da Content Publishing API
+ * recomenda.
+ */
+async function aguardarContainerPronto(containerId: string, tokenDaConta: string): Promise<void> {
+  // O cron que chama isso publica várias menções pendentes numa mesma execução (maxDuration de
+  // 60s no total) — por isso um orçamento de espera mais curto por item (até 15s) em vez de
+  // esperar bastante tempo por uma única mídia lenta.
+  const TENTATIVAS_MAXIMAS = 10;
+  const INTERVALO_MS = 1500;
+
+  for (let tentativa = 0; tentativa < TENTATIVAS_MAXIMAS; tentativa++) {
+    const resposta = await fetch(
+      `https://graph.facebook.com/${GRAPH_API_VERSION}/${containerId}?fields=status_code&access_token=${encodeURIComponent(
+        tokenDaConta
+      )}`,
+      { cache: "no-store" }
+    );
+
+    if (resposta.ok) {
+      const dados = await resposta.json();
+      const statusCode = dados?.status_code as string | undefined;
+
+      if (statusCode === "FINISHED") return;
+
+      if (statusCode === "ERROR") {
+        throw new Error("A Meta reportou erro ao processar a mídia da Story (container em ERROR).");
+      }
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, INTERVALO_MS));
+  }
+
+  throw new Error("A mídia da Story não ficou pronta a tempo (container nunca chegou a FINISHED).");
+}
+
+/**
  * Publica uma Story na conta do Instagram do shopping, em duas etapas conforme a documentação
  * oficial da Meta (Content Publishing API): cria um container de mídia com
  * `media_type=STORIES` + `image_url`/`video_url` (precisa ser uma URL pública, por isso a mídia
@@ -188,6 +227,8 @@ export async function publicarStoryNoInstagram(
   if (!containerId) {
     throw new Error("A Meta não devolveu um ID de container ao criar a Story.");
   }
+
+  await aguardarContainerPronto(containerId, tokenDaConta);
 
   const respostaPublicacao = await fetch(
     `https://graph.facebook.com/${GRAPH_API_VERSION}/${instagramUserId}/media_publish`,
