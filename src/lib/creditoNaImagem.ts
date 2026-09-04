@@ -4,8 +4,8 @@ import path from "node:path";
 import { readFile } from "node:fs/promises";
 
 /**
- * Sobrepõe uma faixa semitransparente no rodapé da imagem com o @usuário de quem marcou o
- * shopping no Story, antes de guardar/publicar — dá crédito visível à loja na Story republicada.
+ * Sobrepõe uma faixa semitransparente com o @usuário de quem marcou o shopping no Story, antes
+ * de guardar/publicar — dá crédito visível à loja na Story republicada.
  *
  * Só funciona pra IMAGEM: a API de publicação de Stories da Meta não permite editar vídeo (e
  * processar vídeo exigiria ffmpeg, inviável numa function serverless). Vídeo passa direto, sem
@@ -14,6 +14,14 @@ import { readFile } from "node:fs/promises";
 export function ehImagem(contentType: string): boolean {
   return contentType.includes("image");
 }
+
+// Fração da altura onde fica o CENTRO da faixa e da marcação clicável (user_tags, ver
+// metaMessaging.ts) — as duas usam o MESMO valor pra ficarem alinhadas visualmente. Não pode ficar
+// muito perto do rodapé (~0.92, testado em 04/09/2026): a Story marcou a página, mas a figurinha
+// não ficava clicável — a barra de "responder" que o próprio Instagram desenha por cima da Story
+// intercepta o toque nessa faixa inferior (~13% de baixo). 0.80 fica dentro da área seguro (a Meta
+// recomenda evitar os ~13% de cima e de baixo da tela pra qualquer elemento interativo).
+export const POSICAO_Y_CREDITO = 0.8;
 
 // O texto vira contorno vetorial (path) em vez de <text> no SVG — funções serverless não têm
 // nenhuma fonte instalada, então `<text font-family="Arial">` renderiza como "tofu" (quadradinhos
@@ -47,18 +55,19 @@ export async function adicionarFaixaDeCredito(
   const tamanhoFonte = Math.round(alturaFaixa * 0.45);
   const texto = `@${username}`;
 
+  const centroY = altura * POSICAO_Y_CREDITO;
+
   const fonte = await carregarFonte();
   const escala = tamanhoFonte / fonte.unitsPerEm;
   const larguraTexto = fonte.getAdvanceWidth(texto, tamanhoFonte);
   const xInicial = (largura - larguraTexto) / 2;
-  const centroY = altura - alturaFaixa / 2;
   const baselineY = centroY + ((fonte.ascender + fonte.descender) * escala) / 2;
 
   const pathDoTexto = fonte.getPath(texto, xInicial, baselineY, tamanhoFonte).toPathData(2);
 
   const svg = `
     <svg width="${largura}" height="${altura}" xmlns="http://www.w3.org/2000/svg">
-      <rect x="0" y="${altura - alturaFaixa}" width="${largura}" height="${alturaFaixa}" fill="black" fill-opacity="0.55" />
+      <rect x="0" y="${centroY - alturaFaixa / 2}" width="${largura}" height="${alturaFaixa}" fill="black" fill-opacity="0.55" />
       <path d="${pathDoTexto}" fill="white" />
     </svg>
   `;

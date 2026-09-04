@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { POSICAO_Y_CREDITO } from "./creditoNaImagem";
 
 const GRAPH_API_VERSION = "v21.0";
 
@@ -183,7 +184,10 @@ async function aguardarContainerPronto(containerId: string, tokenDaConta: string
  * `usernameParaMarcar`, quando informado, usa o campo `user_tags` (suportado pra Stories de
  * imagem e vídeo desde 09/07/2025) pra criar uma marcação clicável de verdade da loja que gerou a
  * menção — {x, y} é só a posição da marcação na mídia (0.0–1.0, a partir do canto superior
- * esquerdo); 0.5/0.92 deixa perto do rodapé, sem atrapalhar o conteúdo.
+ * esquerdo). Usa a MESMA posição vertical da faixa de crédito (`POSICAO_Y_CREDITO`, ver
+ * creditoNaImagem.ts) — fora dessa faixa segura, perto do rodapé, a barra de "responder" que o
+ * próprio Instagram desenha por cima da Story intercepta o toque e a figurinha não fica clicável
+ * (confirmado em teste real em 04/09/2026).
  */
 export async function publicarStoryNoInstagram(
   tokenDaConta: string,
@@ -201,7 +205,7 @@ export async function publicarStoryNoInstagram(
   // teste real (04/09/2026) mostrou a Story publicando normal mas sem nenhuma marcação, porque a
   // Meta recebia um texto no lugar de uma lista e ignorava a marcação sem dar erro.
   const camposDeMarcacao = usernameParaMarcar
-    ? { user_tags: [{ username: usernameParaMarcar, x: 0.5, y: 0.92 }] }
+    ? { user_tags: [{ username: usernameParaMarcar, x: 0.5, y: POSICAO_Y_CREDITO }] }
     : {};
 
   const respostaContainer = await fetch(
