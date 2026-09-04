@@ -9,31 +9,36 @@ const GRAPH_API_VERSION = "v21.0";
  * Comparação em tempo constante (timingSafeEqual) pra não vazar informação por tempo de resposta.
  */
 export function assinaturaValida(corpoBruto: string, assinaturaRecebida: string | null): boolean {
-  // Descoberto na prática (04/09/2026): o webhook do Instagram é assinado com a chave secreta do
-  // sub-app "API do Instagram" (Config. do app > Casos de uso > API do Instagram > Chave secreta
-  // do app do Instagram) — DIFERENTE da chave secreta do App principal (Config. do app > Básico),
-  // que é a usada pra trocar código por token no OAuth do Login do Facebook. Confirmado testando o
-  // botão "Teste" do campo `messages`: só bateu depois de usar a chave do sub-app do Instagram.
-  const appSecret = process.env.META_INSTAGRAM_APP_SECRET;
-
-  if (!appSecret) {
-    console.warn("assinaturaValida: META_INSTAGRAM_APP_SECRET não configurada.");
-    return false;
-  }
+  // Descoberto na prática (04/09/2026): esse App tem DOIS produtos de webhook coexistindo —
+  // "Messenger" (assina com a chave secreta do App principal, Config. do app > Básico — mesma
+  // usada no OAuth) e "Casos de uso > API do Instagram" (assina com a chave secreta do sub-app
+  // "ShoppingHub-IG"). Sem saber qual produto vai efetivamente entregar cada evento em produção,
+  // confere contra as duas chaves — basta uma bater.
   if (!assinaturaRecebida) {
     console.warn("assinaturaValida: requisição sem header x-hub-signature-256.");
     return false;
   }
 
-  const esperada =
-    "sha256=" + crypto.createHmac("sha256", appSecret).update(corpoBruto, "utf8").digest("hex");
+  const secrets = [process.env.META_APP_SECRET, process.env.META_INSTAGRAM_APP_SECRET].filter(
+    (s): s is string => Boolean(s)
+  );
 
-  const bufferEsperado = Buffer.from(esperada, "utf8");
+  if (secrets.length === 0) {
+    console.warn("assinaturaValida: nenhum App Secret configurado.");
+    return false;
+  }
+
   const bufferRecebido = Buffer.from(assinaturaRecebida, "utf8");
 
-  const valida =
-    bufferEsperado.length === bufferRecebido.length &&
-    crypto.timingSafeEqual(bufferEsperado, bufferRecebido);
+  const valida = secrets.some((appSecret) => {
+    const esperada =
+      "sha256=" + crypto.createHmac("sha256", appSecret).update(corpoBruto, "utf8").digest("hex");
+    const bufferEsperado = Buffer.from(esperada, "utf8");
+    return (
+      bufferEsperado.length === bufferRecebido.length &&
+      crypto.timingSafeEqual(bufferEsperado, bufferRecebido)
+    );
+  });
 
   if (!valida) {
     console.warn("assinaturaValida: assinatura não bateu — requisição recusada.");
