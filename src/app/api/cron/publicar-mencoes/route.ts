@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { criarClienteAdmin } from "@/lib/supabase/admin";
 import { publicarStoryNoInstagram } from "@/lib/metaMessaging";
 import { BUCKET_MENCOES, tipoDeMidiaPorContentType } from "@/lib/mencoes";
+import { limparMensagensAntigas } from "@/lib/retencao";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -49,7 +50,11 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, ...resultado });
+  // Aproveita esse mesmo cron (já roda duas vezes por dia) pra também limpar mensagens antigas do
+  // histórico de atendimento — evita criar um cron novo só pra isso.
+  const mensagensApagadas = await limparMensagensAntigas(admin);
+
+  return NextResponse.json({ ok: true, ...resultado, mensagensApagadas });
 }
 
 async function publicarMencao(

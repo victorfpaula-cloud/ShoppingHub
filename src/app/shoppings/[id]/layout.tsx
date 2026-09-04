@@ -50,6 +50,12 @@ export default async function ShoppingLayout({
               Fila de menções
             </a>
             <a
+              href={`/shoppings/${shopping.id}/atendimentos`}
+              className="rounded-lg px-3 py-1.5 text-sm text-neutral-300 hover:bg-neutral-800"
+            >
+              Atendimentos
+            </a>
+            <a
               href={`/shoppings/${shopping.id}/guardrails`}
               className="rounded-lg px-3 py-1.5 text-sm text-neutral-300 hover:bg-neutral-800"
             >
