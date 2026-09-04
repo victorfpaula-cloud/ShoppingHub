@@ -57,7 +57,10 @@ export async function trocarCodigoPorToken(codigo: string): Promise<string> {
   );
 
   if (!resposta.ok) {
-    throw new Error(`Falha ao trocar o código pelo token (status ${resposta.status}).`);
+    const corpoDoErro = await resposta.text().catch(() => "");
+    throw new Error(
+      `Falha ao trocar o código pelo token (status ${resposta.status}): ${corpoDoErro}`
+    );
   }
 
   const dados = await resposta.json();
@@ -78,7 +81,10 @@ export async function trocarPorTokenDeLongaDuracao(tokenCurto: string): Promise<
   );
 
   if (!resposta.ok) {
-    throw new Error(`Falha ao gerar token de longa duração (status ${resposta.status}).`);
+    const corpoDoErro = await resposta.text().catch(() => "");
+    throw new Error(
+      `Falha ao gerar token de longa duração (status ${resposta.status}): ${corpoDoErro}`
+    );
   }
 
   const dados = await resposta.json();
@@ -136,7 +142,10 @@ export async function listarPaginasComInstagram(
   );
 
   if (!resposta.ok) {
-    throw new Error(`Falha ao listar Páginas do usuário (status ${resposta.status}).`);
+    const corpoDoErro = await resposta.text().catch(() => "");
+    throw new Error(
+      `Falha ao listar Páginas do usuário (status ${resposta.status}): ${corpoDoErro}`
+    );
   }
 
   const dados = await resposta.json();
