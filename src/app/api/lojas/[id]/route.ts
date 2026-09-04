@@ -29,6 +29,14 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       .replace(/^@/, "")
       .toLowerCase() || null;
 
+  const instagramUsername2 =
+    formData
+      .get("instagram_username_2")
+      ?.toString()
+      .trim()
+      .replace(/^@/, "")
+      .toLowerCase() || null;
+
   const limiteDiarioBruto = formData.get("limite_diario_mencoes")?.toString().trim();
   const limiteDiarioMencoes = limiteDiarioBruto ? parseInt(limiteDiarioBruto, 10) : 10;
 
@@ -48,6 +56,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       nome,
       ativo: formData.get("ativo")?.toString() === "1",
       instagram_username: instagramUsername,
+      instagram_username_2: instagramUsername2,
       limite_diario_mencoes: limiteDiarioMencoes,
       endereco: formData.get("endereco")?.toString().trim() || null,
       telefone: formData.get("telefone")?.toString().trim() || null,
@@ -63,7 +72,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     console.error("Falha ao salvar loja:", error);
     const mensagem =
       error.code === "23505"
-        ? "Já existe uma loja com esse @usuário do Instagram nesse shopping."
+        ? "Já existe uma loja com esse @usuário do Instagram nesse shopping (confira o 1º e o 2º campo)."
         : error.message;
     return NextResponse.redirect(
       new URL(`${destino}?erro=${encodeURIComponent(mensagem)}`, request.url)

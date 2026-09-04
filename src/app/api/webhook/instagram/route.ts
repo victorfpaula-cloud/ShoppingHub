@@ -267,12 +267,16 @@ async function processarMencaoDeStory(
     return;
   }
 
-  const { data: loja } = await admin
+  const { data: lojasDoShopping } = await admin
     .from("shoppinghub_lojas")
-    .select("id, limite_diario_mencoes, ativo")
-    .eq("shopping_id", conta.shopping_id)
-    .ilike("instagram_username", username)
-    .maybeSingle();
+    .select("id, limite_diario_mencoes, ativo, instagram_username, instagram_username_2")
+    .eq("shopping_id", conta.shopping_id);
+
+  const loja = (lojasDoShopping ?? []).find(
+    (l) =>
+      l.instagram_username?.toLowerCase() === username ||
+      l.instagram_username_2?.toLowerCase() === username
+  );
 
   if (!loja || !loja.ativo) {
     console.warn(

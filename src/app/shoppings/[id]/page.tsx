@@ -11,7 +11,9 @@ export default async function LojasDoShoppingPage({
 
   const { data: lojas } = await admin
     .from("shoppinghub_lojas")
-    .select("id, nome, eh_geral, ativo, instagram_username, base_conhecimento_texto")
+    .select(
+      "id, nome, eh_geral, ativo, instagram_username, instagram_username_2, base_conhecimento_texto"
+    )
     .eq("shopping_id", params.id)
     .order("ordem", { ascending: true });
 
@@ -56,7 +58,12 @@ export default async function LojasDoShoppingPage({
                 {loja.ativo ? "Ativa" : "Inativa"}
               </span>
               <span className="rounded-full border border-neutral-700 bg-neutral-900 px-2 py-0.5 text-neutral-400">
-                {loja.instagram_username ? `@${loja.instagram_username}` : "Sem @usuário autorizado"}
+                {loja.instagram_username
+                  ? [loja.instagram_username, loja.instagram_username_2]
+                      .filter(Boolean)
+                      .map((u) => `@${u}`)
+                      .join(" / ")
+                  : "Sem @usuário autorizado"}
               </span>
               <span className="rounded-full border border-neutral-700 bg-neutral-900 px-2 py-0.5 text-neutral-400">
                 {loja.base_conhecimento_texto?.trim()

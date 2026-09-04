@@ -75,8 +75,9 @@ alter table shoppinghub_contas enable row level security;
 -- (horário de funcionamento, estacionamento etc.) — todo shopping deve manter exatamente uma loja
 -- com eh_geral = true (garantido pelo índice único parcial abaixo), criada automaticamente no seed.
 --
--- `instagram_username` é o @usuário autorizado da loja — chave de identificação de quem pode ter
--- uma menção de Story reposted (ver shoppinghub_mencoes) — único por shopping.
+-- `instagram_username` e `instagram_username_2` são até dois @usuários autorizados da loja — chave
+-- de identificação de quem pode ter uma menção de Story reposted (ver shoppinghub_mencoes) — cada
+-- um único por shopping. O segundo é opcional; em branco não muda o comportamento do primeiro.
 -- `limite_diario_mencoes` limita quantas menções de Stories dessa loja entram na fila por dia
 -- (reset à meia-noite, horário de Brasília).
 -- ============================================================================
@@ -89,6 +90,7 @@ create table if not exists shoppinghub_lojas (
   ativo boolean not null default true,
 
   instagram_username text,
+  instagram_username_2 text,
   limite_diario_mencoes integer not null default 10,
 
   -- contatos e informações estruturadas (todos opcionais)
@@ -118,6 +120,10 @@ create unique index if not exists shoppinghub_lojas_uma_geral_por_shopping
 create unique index if not exists shoppinghub_lojas_username_por_shopping
   on shoppinghub_lojas(shopping_id, lower(instagram_username))
   where instagram_username is not null;
+
+create unique index if not exists shoppinghub_lojas_username2_por_shopping
+  on shoppinghub_lojas(shopping_id, lower(instagram_username_2))
+  where instagram_username_2 is not null;
 
 alter table shoppinghub_lojas enable row level security;
 

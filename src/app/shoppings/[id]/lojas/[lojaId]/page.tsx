@@ -14,7 +14,7 @@ export default async function EditarLojaPage({
   const { data: loja } = await admin
     .from("shoppinghub_lojas")
     .select(
-      "id, nome, eh_geral, ativo, instagram_username, limite_diario_mencoes, endereco, telefone, email, horario_atendimento, responsavel, base_conhecimento_texto"
+      "id, nome, eh_geral, ativo, instagram_username, instagram_username_2, limite_diario_mencoes, endereco, telefone, email, horario_atendimento, responsavel, base_conhecimento_texto"
     )
     .eq("id", params.lojaId)
     .eq("shopping_id", params.id)
@@ -81,9 +81,9 @@ export default async function EditarLojaPage({
           <div className="rounded-xl border border-neutral-800 bg-neutral-950 p-4">
             <h3 className="text-sm font-semibold text-neutral-200">Marcação de Stories</h3>
             <p className="mt-1 text-xs text-neutral-500">
-              @usuário autorizado a marcar o shopping nos Stories dele — só menções desse @usuário
-              entram na fila de republicação. Deixe em branco pra não autorizar nenhum por
-              enquanto.
+              @usuário autorizado a marcar o shopping nos Stories dele — só menções desses
+              @usuários entram na fila de republicação. Dá pra cadastrar até dois; deixe o segundo
+              em branco pra não autorizar mais ninguém além do primeiro.
             </p>
 
             <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -94,6 +94,16 @@ export default async function EditarLojaPage({
                   name="instagram_username"
                   placeholder="Ex: loja_exemplo"
                   defaultValue={loja.instagram_username ?? ""}
+                  className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-neutral-400">2º @usuário do Instagram (opcional)</label>
+                <input
+                  type="text"
+                  name="instagram_username_2"
+                  placeholder="Ex: outra_conta"
+                  defaultValue={loja.instagram_username_2 ?? ""}
                   className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm"
                 />
               </div>
