@@ -23,7 +23,13 @@ function formatarDataHora(iso: string): string {
   }).format(new Date(iso));
 }
 
-export default async function FilaDeMencoesPage({ params }: { params: { id: string } }) {
+export default async function FilaDeMencoesPage({
+  params,
+  searchParams,
+}: {
+  params: { id: string };
+  searchParams: { erro?: string };
+}) {
   const admin = criarClienteAdmin();
 
   const { data: lojas } = await admin
@@ -56,10 +62,15 @@ export default async function FilaDeMencoesPage({ params }: { params: { id: stri
     <div>
       <h2 className="text-lg font-semibold">Fila de menções de Stories</h2>
       <p className="mt-1 text-sm text-neutral-400">
-        Só visualização (não tem botão de aprovar) — a publicação é automática pelo cron, duas
-        vezes por dia. Útil pra debug e auditoria de quais menções entraram, foram publicadas ou
-        descartadas.
+        A publicação é automática pelo cron, duas vezes por dia — não tem botão de aprovar, só de
+        excluir (caso precise tirar uma menção indevida ou um teste antes de ser publicado).
       </p>
+
+      {searchParams.erro && (
+        <div className="mt-4 break-words rounded-lg border border-red-900 bg-red-950 px-4 py-2 text-sm text-red-300">
+          {searchParams.erro}
+        </div>
+      )}
 
       <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {(Object.keys(ROTULO_DO_STATUS) as Array<keyof typeof ROTULO_DO_STATUS>).map((status) => (
@@ -109,6 +120,16 @@ export default async function FilaDeMencoesPage({ params }: { params: { id: stri
                   {mencao.publicado_em && ` — publicada em ${formatarDataHora(mencao.publicado_em)}`}
                 </p>
               </div>
+
+              <form action={`/api/mencoes/${mencao.id}/excluir`} method="POST">
+                <input type="hidden" name="shopping_id" value={params.id} />
+                <button
+                  type="submit"
+                  className="shrink-0 rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs font-medium text-neutral-500 hover:border-red-900 hover:bg-red-950/40 hover:text-red-400"
+                >
+                  Excluir
+                </button>
+              </form>
             </div>
           );
         })}
