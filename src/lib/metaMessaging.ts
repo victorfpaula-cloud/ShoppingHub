@@ -195,8 +195,13 @@ export async function publicarStoryNoInstagram(
   const camposDeMidia =
     tipoDeMidia === "VIDEO" ? { video_url: urlPublicaDaMidia } : { image_url: urlPublicaDaMidia };
 
+  // `user_tags` precisa ser um array de verdade aqui, não uma string — o corpo inteiro da
+  // requisição já passa por JSON.stringify mais abaixo. Encodar como string funciona só em POST
+  // form-urlencoded (formato usado nos exemplos da documentação da Meta), não em JSON puro; um
+  // teste real (04/09/2026) mostrou a Story publicando normal mas sem nenhuma marcação, porque a
+  // Meta recebia um texto no lugar de uma lista e ignorava a marcação sem dar erro.
   const camposDeMarcacao = usernameParaMarcar
-    ? { user_tags: JSON.stringify([{ username: usernameParaMarcar, x: 0.5, y: 0.92 }]) }
+    ? { user_tags: [{ username: usernameParaMarcar, x: 0.5, y: 0.92 }] }
     : {};
 
   const respostaContainer = await fetch(
