@@ -9,10 +9,15 @@ const GRAPH_API_VERSION = "v21.0";
  * Comparação em tempo constante (timingSafeEqual) pra não vazar informação por tempo de resposta.
  */
 export function assinaturaValida(corpoBruto: string, assinaturaRecebida: string | null): boolean {
-  const appSecret = process.env.META_APP_SECRET;
+  // Descoberto na prática (04/09/2026): o webhook do Instagram é assinado com a chave secreta do
+  // sub-app "API do Instagram" (Config. do app > Casos de uso > API do Instagram > Chave secreta
+  // do app do Instagram) — DIFERENTE da chave secreta do App principal (Config. do app > Básico),
+  // que é a usada pra trocar código por token no OAuth do Login do Facebook. Confirmado testando o
+  // botão "Teste" do campo `messages`: só bateu depois de usar a chave do sub-app do Instagram.
+  const appSecret = process.env.META_INSTAGRAM_APP_SECRET;
 
   if (!appSecret) {
-    console.warn("assinaturaValida: META_APP_SECRET não configurada.");
+    console.warn("assinaturaValida: META_INSTAGRAM_APP_SECRET não configurada.");
     return false;
   }
   if (!assinaturaRecebida) {
@@ -31,13 +36,7 @@ export function assinaturaValida(corpoBruto: string, assinaturaRecebida: string 
     crypto.timingSafeEqual(bufferEsperado, bufferRecebido);
 
   if (!valida) {
-    // Log temporário de diagnóstico — nenhum dos dois valores aqui permite recuperar o App
-    // Secret, só serve pra comparar visualmente o que a Meta mandou vs o que calculamos.
-    console.warn("assinaturaValida: assinatura não bateu.", {
-      esperada,
-      recebida: assinaturaRecebida,
-      tamanhoDoCorpo: corpoBruto.length,
-    });
+    console.warn("assinaturaValida: assinatura não bateu — requisição recusada.");
   }
 
   return valida;
