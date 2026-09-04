@@ -8,6 +8,7 @@ import {
 } from "@/lib/metaMessaging";
 import { decidirLoja, responderComoLoja, type LojaComConhecimento } from "@/lib/triagem";
 import { inicioDoDiaBrasiliaISO, subirMidiaDeMencao } from "@/lib/mencoes";
+import { adicionarFaixaDeCredito, ehImagem } from "@/lib/creditoNaImagem";
 
 const CAMPOS_DA_LOJA =
   "id, nome, eh_geral, endereco, telefone, email, horario_atendimento, responsavel, base_conhecimento_texto";
@@ -329,11 +330,17 @@ async function processarMencaoDeStory(
   }
 
   try {
+    // Dá crédito à loja sobrepondo uma faixa com o @usuário dela no rodapé da imagem, antes de
+    // guardar — só funciona pra imagem (vídeo publica sem a faixa, ver comentário na função).
+    const midiaFinal = ehImagem(midia.contentType)
+      ? await adicionarFaixaDeCredito(midia.bytes, username)
+      : midia;
+
     const { storagePath } = await subirMidiaDeMencao(
       admin,
       mencaoCriada.id,
-      midia.bytes,
-      midia.contentType
+      midiaFinal.bytes,
+      midiaFinal.contentType
     );
     await admin
       .from("shoppinghub_mencoes")
