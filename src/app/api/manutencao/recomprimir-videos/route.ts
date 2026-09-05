@@ -33,9 +33,29 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ ok: false, erro: error.message }, { status: 500 });
   }
 
-  const resultado = { processados: 0, falhas: 0, total: mencoes?.length ?? 0, detalhes: [] as string[] };
+  const resultado = {
+    processados: 0,
+    falhas: 0,
+    adiados: 0,
+    total: mencoes?.length ?? 0,
+    detalhes: [] as string[],
+  };
+
+  // Baixar + comprimir + subir de novo cada vídeo demora bem mais que só comprimir (rede de
+  // verdade, não o teste local) — com vários vídeos na fila, dava pra estourar os 60s totais que
+  // a Vercel permite (relatado em 05/09/2026: "erro de servidor" depois de um tempo). Mesma
+  // solução do cron: para de começar itens novos perto do limite, devolve uma resposta normal com
+  // o que já deu tempo de fazer, e o resto fica pronto pra próxima vez que essa URL for aberta —
+  // reprocessar um vídeo que já foi cortado pra 10s de novo não faz mal nenhum.
+  const inicioDaExecucao = Date.now();
+  const LIMITE_MS_PARA_NOVOS_ITENS = 45_000;
 
   for (const mencao of mencoes ?? []) {
+    if (Date.now() - inicioDaExecucao > LIMITE_MS_PARA_NOVOS_ITENS) {
+      resultado.adiados += 1;
+      continue;
+    }
+
     try {
       const { data: arquivo, error: erroDownload } = await admin.storage
         .from(BUCKET_MENCOES)
