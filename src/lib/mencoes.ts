@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { baixarMidiaDoStory } from "./metaMessaging";
 import { adicionarFaixaDeCredito, ehImagem } from "./creditoNaImagem";
+import { comprimirVideo } from "./comprimirVideo";
 
 // Bucket público do Supabase Storage onde ficam guardadas as mídias baixadas de menções de Story
 // — precisa ser público porque a API de publicação de Stories da Meta exige uma `image_url`/
@@ -204,11 +205,13 @@ export async function processarMencaoRecebida(
   }
 
   try {
-    // Dá crédito à loja sobrepondo uma faixa com o @usuário dela no rodapé da imagem, antes de
-    // guardar — só funciona pra imagem (vídeo publica sem a faixa, ver comentário na função).
+    // Imagem: dá crédito à loja sobrepondo uma faixa com o @usuário dela no rodapé, antes de
+    // guardar. Vídeo: corta pros primeiros 10s e recomprime num formato garantidamente compatível
+    // — evita vídeos longos/grandes travando pra sempre no processamento da Meta (ver
+    // comprimirVideo.ts) e não publica com a faixa (a API de Stories não permite editar vídeo).
     const midiaFinal = ehImagem(midia.contentType)
       ? await adicionarFaixaDeCredito(midia.bytes, username)
-      : midia;
+      : await comprimirVideo(midia.bytes);
 
     const { storagePath } = await subirMidiaDeMencao(
       admin,

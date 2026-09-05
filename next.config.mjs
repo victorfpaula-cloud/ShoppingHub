@@ -1,5 +1,17 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  experimental: {
+    // O rastreador de arquivos do Next não detecta sozinho o binário do ffmpeg-static (o caminho
+    // dele é montado em tempo de execução a partir de um valor lido do package.json, não uma
+    // string literal — o rastreamento estático não enxerga isso). Sem essa inclusão explícita, o
+    // binário fica de fora do pacote da function na Vercel e o comprimirVideo() quebra em
+    // produção. Só nas duas rotas que processam menção de Story recebida (onde o vídeo é
+    // comprimido) — ver src/lib/comprimirVideo.ts.
+    outputFileTracingIncludes: {
+      "/api/webhook/instagram": ["./node_modules/ffmpeg-static/**"],
+      "/api/bridge/sendpulse/webhook": ["./node_modules/ffmpeg-static/**"],
+    },
+  },
   async headers() {
     return [
       {
