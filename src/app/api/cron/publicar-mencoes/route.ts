@@ -38,9 +38,29 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ ok: false, erro: error.message }, { status: 500 });
   }
 
-  const resultado = { publicadas: 0, falhas: 0, total: mencoesPendentes?.length ?? 0 };
+  const resultado = {
+    publicadas: 0,
+    falhas: 0,
+    adiadas: 0,
+    total: mencoesPendentes?.length ?? 0,
+  };
+
+  // Vídeo pode levar até ~40s só esperando a Meta processar (ver aguardarContainerPronto em
+  // metaMessaging.ts) — com várias menções de vídeo na fila, publicar todas na mesma execução
+  // estourava os 60s totais que a Vercel permite (Vercel Runtime Timeout, visto em produção em
+  // 05/09/2026), o que também impedia a limpeza de mensagens e a exportação de rodar. Por isso,
+  // para de pegar itens NOVOS assim que o tempo já gasto se aproxima do limite — o que sobrar
+  // fica "pendente" e é pego na próxima execução do cron, sem nunca arriscar estourar o tempo
+  // total da function.
+  const inicioDaExecucao = Date.now();
+  const LIMITE_MS_PARA_NOVOS_ITENS = 45_000;
 
   for (const mencao of mencoesPendentes ?? []) {
+    if (Date.now() - inicioDaExecucao > LIMITE_MS_PARA_NOVOS_ITENS) {
+      resultado.adiadas += 1;
+      continue;
+    }
+
     try {
       await publicarMencao(admin, mencao);
       resultado.publicadas += 1;

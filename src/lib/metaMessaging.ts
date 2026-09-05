@@ -141,12 +141,19 @@ export async function baixarMidiaDoStory(
  * `ERROR`) antes de seguir pra publicação, do jeito que a documentação da Content Publishing API
  * recomenda.
  */
-async function aguardarContainerPronto(containerId: string, tokenDaConta: string): Promise<void> {
-  // O cron que chama isso publica várias menções pendentes numa mesma execução (maxDuration de
-  // 60s no total) — por isso um orçamento de espera mais curto por item (até 15s) em vez de
-  // esperar bastante tempo por uma única mídia lenta.
-  const TENTATIVAS_MAXIMAS = 10;
-  const INTERVALO_MS = 1500;
+async function aguardarContainerPronto(
+  containerId: string,
+  tokenDaConta: string,
+  tipoDeMidia: "IMAGE" | "VIDEO"
+): Promise<void> {
+  // Vídeo demora bem mais que imagem pra Meta processar (transcodificação) — um orçamento curto
+  // demais faz o container ainda estar em progresso quando desistimos, e a menção erra à toa
+  // (aconteceu na prática em 05/09/2026, com várias menções de vídeo na fila). O cron que chama
+  // isso publica várias menções na mesma execução (maxDuration de 60s no total) e já para de
+  // pegar itens novos antes de chegar perto do limite (ver publicar-mencoes/route.ts), então dá
+  // pra ser mais generoso aqui sem risco de estourar o tempo total da function.
+  const TENTATIVAS_MAXIMAS = tipoDeMidia === "VIDEO" ? 20 : 6;
+  const INTERVALO_MS = 2000;
 
   for (let tentativa = 0; tentativa < TENTATIVAS_MAXIMAS; tentativa++) {
     const resposta = await fetch(
@@ -237,7 +244,7 @@ export async function publicarStoryNoInstagram(
     throw new Error("A Meta não devolveu um ID de container ao criar a Story.");
   }
 
-  await aguardarContainerPronto(containerId, tokenDaConta);
+  await aguardarContainerPronto(containerId, tokenDaConta, tipoDeMidia);
 
   const respostaPublicacao = await fetch(
     `https://graph.facebook.com/${GRAPH_API_VERSION}/${instagramUserId}/media_publish`,
