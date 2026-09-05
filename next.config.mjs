@@ -1,6 +1,14 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   experimental: {
+    // O webpack do Next empacota o código do ffmpeg-static junto com a rota por padrão — isso
+    // muda o __dirname que o pacote usa pra montar o caminho do próprio binário (passa a apontar
+    // pra dentro de .next/server/chunks, onde o binário não existe, em vez de node_modules/
+    // ffmpeg-static, onde ele realmente está). Marcando como "external" aqui, o Next deixa o
+    // require("ffmpeg-static") intacto, resolvido de verdade em node_modules na hora que a
+    // function roda — confirmado em produção em 05/09/2026 (erro "spawn .../chunks/ffmpeg ENOENT"
+    // sem essa configuração).
+    serverComponentsExternalPackages: ["ffmpeg-static"],
     // O rastreador de arquivos do Next não detecta sozinho o binário do ffmpeg-static (o caminho
     // dele é montado em tempo de execução a partir de um valor lido do package.json, não uma
     // string literal — o rastreamento estático não enxerga isso). Sem essa inclusão explícita, o
