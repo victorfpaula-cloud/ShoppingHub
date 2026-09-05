@@ -1,9 +1,19 @@
 import { criarClienteAdmin } from "@/lib/supabase/admin";
-import { inicioDoDiaBrasiliaISO } from "@/lib/mencoes";
+import { inicioDoCicloDePublicacaoISO, proximaPublicacaoISO } from "@/lib/mencoes";
 
 export const dynamic = "force-dynamic";
 
-function BarraDeProgressoDoDia({
+function formatarHoraBrasilia(iso: string): string {
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(iso));
+}
+
+function BarraDeProgressoDoCiclo({
   rotulo,
   valor,
   corBarra,
@@ -46,37 +56,40 @@ export default async function LojasDoShoppingPage({
     .order("ordem", { ascending: true });
 
   const idsDasLojas = (lojas ?? []).map((l) => l.id);
-  const inicioHoje = inicioDoDiaBrasiliaISO();
 
-  // "Hoje" reseta sozinho à meia-noite (horário de Brasília) — não precisa de nenhuma rotina de
-  // limpeza, é só filtrar pela data em cada consulta.
-  const { data: mencoesMarcadasHoje } =
+  // Régua do CICLO de publicação (último cron que já passou até o próximo), não da meia-noite —
+  // uma menção recebida às 22h30 (depois do cron das 18h) precisa continuar contando a noite
+  // inteira, até publicar de verdade no cron do meio-dia seguinte. Ver src/lib/mencoes.ts.
+  const inicioDoCiclo = inicioDoCicloDePublicacaoISO();
+  const proximaPublicacao = proximaPublicacaoISO();
+
+  const { data: mencoesDoCiclo } =
     idsDasLojas.length > 0
       ? await admin
           .from("shoppinghub_mencoes")
           .select("loja_id")
           .in("loja_id", idsDasLojas)
-          .gte("recebido_em", inicioHoje)
+          .gte("recebido_em", inicioDoCiclo)
       : { data: [] as { loja_id: string }[] };
 
-  const { count: publicadosHoje } =
+  const { count: publicadosNoCiclo } =
     idsDasLojas.length > 0
       ? await admin
           .from("shoppinghub_mencoes")
           .select("id", { count: "exact", head: true })
           .in("loja_id", idsDasLojas)
           .eq("status", "publicado")
-          .gte("publicado_em", inicioHoje)
+          .gte("publicado_em", inicioDoCiclo)
       : { count: 0 };
 
-  const marcadosHojePorLoja = new Map<string, number>();
-  for (const m of mencoesMarcadasHoje ?? []) {
-    marcadosHojePorLoja.set(m.loja_id, (marcadosHojePorLoja.get(m.loja_id) ?? 0) + 1);
+  const marcadosPorLojaNoCiclo = new Map<string, number>();
+  for (const m of mencoesDoCiclo ?? []) {
+    marcadosPorLojaNoCiclo.set(m.loja_id, (marcadosPorLojaNoCiclo.get(m.loja_id) ?? 0) + 1);
   }
 
-  const totalMarcadosHoje = (mencoesMarcadasHoje ?? []).length;
-  const totalPublicadosHoje = publicadosHoje ?? 0;
-  const maiorValorDoDia = Math.max(totalMarcadosHoje, totalPublicadosHoje, 1);
+  const totalMarcadosNoCiclo = (mencoesDoCiclo ?? []).length;
+  const totalPublicadosNoCiclo = publicadosNoCiclo ?? 0;
+  const maiorValorDoCiclo = Math.max(totalMarcadosNoCiclo, totalPublicadosNoCiclo, 1);
 
   return (
     <div>
@@ -90,24 +103,30 @@ export default async function LojasDoShoppingPage({
         </a>
       </div>
 
-      <div className="mt-4 flex flex-col gap-3 rounded-xl border border-neutral-800 bg-neutral-900 p-4 sm:flex-row sm:gap-6">
-        <BarraDeProgressoDoDia
-          rotulo="Stories marcados hoje"
-          valor={totalMarcadosHoje}
-          corBarra="bg-sky-500"
-          larguraPercentual={Math.max(4, (totalMarcadosHoje / maiorValorDoDia) * 100)}
-        />
-        <BarraDeProgressoDoDia
-          rotulo="Stories publicados hoje"
-          valor={totalPublicadosHoje}
-          corBarra="bg-green-500"
-          larguraPercentual={Math.max(4, (totalPublicadosHoje / maiorValorDoDia) * 100)}
-        />
+      <div className="mt-4 rounded-xl border border-neutral-800 bg-neutral-900 p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:gap-6">
+          <BarraDeProgressoDoCiclo
+            rotulo="Aguardando publicar"
+            valor={totalMarcadosNoCiclo}
+            corBarra="bg-sky-500"
+            larguraPercentual={Math.max(4, (totalMarcadosNoCiclo / maiorValorDoCiclo) * 100)}
+          />
+          <BarraDeProgressoDoCiclo
+            rotulo="Publicados neste ciclo"
+            valor={totalPublicadosNoCiclo}
+            corBarra="bg-green-500"
+            larguraPercentual={Math.max(4, (totalPublicadosNoCiclo / maiorValorDoCiclo) * 100)}
+          />
+        </div>
+        <p className="mt-3 text-[11px] text-neutral-500">
+          Ciclo atual desde {formatarHoraBrasilia(inicioDoCiclo)} · próxima publicação automática
+          em {formatarHoraBrasilia(proximaPublicacao)}
+        </p>
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
         {(lojas ?? []).map((loja) => {
-          const marcadosHoje = marcadosHojePorLoja.get(loja.id) ?? 0;
+          const marcadosNoCiclo = marcadosPorLojaNoCiclo.get(loja.id) ?? 0;
 
           return (
             <a
@@ -127,12 +146,12 @@ export default async function LojasDoShoppingPage({
                   )}
                 </span>
 
-                {marcadosHoje > 0 && (
+                {marcadosNoCiclo > 0 && (
                   <span className="flex shrink-0 items-center gap-1 rounded-full bg-gradient-to-r from-sky-600 to-indigo-600 px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm shadow-sky-950">
                     <svg viewBox="0 0 20 20" fill="currentColor" className="h-3 w-3">
                       <path d="M10 2a1 1 0 0 1 1 1v6h6a1 1 0 1 1 0 2h-6v6a1 1 0 1 1-2 0v-6H3a1 1 0 1 1 0-2h6V3a1 1 0 0 1 1-1Z" />
                     </svg>
-                    {marcadosHoje} hoje
+                    {marcadosNoCiclo} aguardando
                   </span>
                 )}
               </div>
