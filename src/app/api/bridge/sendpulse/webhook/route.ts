@@ -18,6 +18,12 @@ import { processarMencaoRecebida } from "@/lib/mencoes";
 //
 // Autenticado por um segredo na própria query string da URL (a tela de Global Webhooks da
 // SendPulse só deixa colar uma URL simples, sem campo de cabeçalho customizado).
+//
+// Sem isso, a Vercel usa o padrão de 10s — insuficiente pra baixar+comprimir um vídeo de menção
+// (ver comprimirVideo.ts, chamado dentro de processarMencaoRecebida), o que podia estourar
+// silenciosamente e cair como "erro" na fila sem nenhuma pista do motivo real.
+export const maxDuration = 60;
+
 export async function POST(request: NextRequest) {
   const segredoRecebido = request.nextUrl.searchParams.get("secret");
   const segredoEsperado = process.env.SENDPULSE_BRIDGE_SECRET;

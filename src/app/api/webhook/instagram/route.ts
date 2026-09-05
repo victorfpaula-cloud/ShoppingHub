@@ -8,6 +8,11 @@ import {
 import { decidirLoja, responderComoLoja, type LojaComConhecimento } from "@/lib/triagem";
 import { processarMencaoRecebida } from "@/lib/mencoes";
 
+// Sem isso, a Vercel usa o padrão de 10s — insuficiente pra baixar+comprimir um vídeo de menção
+// (ver comprimirVideo.ts, chamado dentro de processarMencaoRecebida), o que podia estourar
+// silenciosamente e cair como "erro" na fila sem nenhuma pista do motivo real.
+export const maxDuration = 60;
+
 const CAMPOS_DA_LOJA =
   "id, nome, eh_geral, endereco, telefone, email, horario_atendimento, responsavel, base_conhecimento_texto";
 
