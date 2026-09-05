@@ -32,7 +32,7 @@ function escaparCampoCSV(valor: string): string {
   return valor;
 }
 
-type MencaoParaCSV = {
+export type MencaoParaCSV = {
   loja_id: string;
   instagram_username: string | null;
   status: string;
@@ -41,7 +41,7 @@ type MencaoParaCSV = {
   story_media_id: string | null;
 };
 
-function gerarCsv(mencoes: MencaoParaCSV[], nomePorLoja: Map<string, string>): string {
+export function gerarCsv(mencoes: MencaoParaCSV[], nomePorLoja: Map<string, string>): string {
   const cabecalho = [
     "Loja",
     "Usuario_que_marcou",

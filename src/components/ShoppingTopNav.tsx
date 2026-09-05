@@ -57,13 +57,6 @@ export function ShoppingTopNav({
       ativo: pathname === base || pathname.startsWith(`${base}/lojas/`),
     },
     {
-      href: `${base}/conta`,
-      label: "Conta do Instagram",
-      labelCurto: "Conta IG",
-      icone: ICONE_CONTA,
-      ativo: pathname.startsWith(`${base}/conta`),
-    },
-    {
       href: `${base}/mencoes`,
       label: "Fila de menções",
       labelCurto: "Menções",
@@ -90,6 +83,13 @@ export function ShoppingTopNav({
       labelCurto: "Guardrails",
       icone: ICONE_GUARDRAILS,
       ativo: pathname.startsWith(`${base}/guardrails`),
+    },
+    {
+      href: `${base}/conta`,
+      label: "Conta do Instagram",
+      labelCurto: "Conta IG",
+      icone: ICONE_CONTA,
+      ativo: pathname.startsWith(`${base}/conta`),
     },
   ];
 

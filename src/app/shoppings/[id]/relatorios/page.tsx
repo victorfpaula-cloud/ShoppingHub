@@ -1,5 +1,6 @@
 import { criarClienteAdmin } from "@/lib/supabase/admin";
 import { BUCKET_RELATORIOS } from "@/lib/relatorios";
+import { DiaDeMencoesAccordion } from "@/components/DiaDeMencoesAccordion";
 
 export const dynamic = "force-dynamic";
 
@@ -14,14 +15,6 @@ const ROTULO_DO_STATUS: Record<string, { texto: string; classe: string }> = {
   },
   erro: { texto: "Erro", classe: "bg-danger/15 text-danger" },
 };
-
-function formatarHora(iso: string): string {
-  return new Intl.DateTimeFormat("pt-BR", {
-    timeZone: "America/Sao_Paulo",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(iso));
-}
 
 function formatarDataLonga(iso: string): string {
   return new Intl.DateTimeFormat("pt-BR", {
@@ -46,14 +39,15 @@ function chaveDoDia(iso: string): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date(iso));
 }
 
-type Mencao = {
+// Colunas mínimas pro resumo geral, ranking e agrupamento por dia — o detalhamento linha a linha
+// de cada dia (usuário, horários, status individual) só é buscado sob demanda quando o dropdown
+// daquele dia é aberto (ver DiaDeMencoesAccordion + api/shoppings/[id]/relatorios/dia), em vez de
+// vir tudo de uma vez nessa carga inicial da página.
+type MencaoResumida = {
   id: string;
   loja_id: string;
-  instagram_username: string | null;
   status: string;
   recebido_em: string;
-  publicado_em: string | null;
-  story_media_id: string | null;
 };
 
 export default async function RelatoriosDeMencoesPage({ params }: { params: { id: string } }) {
@@ -72,11 +66,11 @@ export default async function RelatoriosDeMencoesPage({ params }: { params: { id
     idsDasLojas.length > 0
       ? await admin
           .from("shoppinghub_mencoes")
-          .select("id, loja_id, instagram_username, status, recebido_em, publicado_em, story_media_id")
+          .select("id, loja_id, status, recebido_em")
           .in("loja_id", idsDasLojas)
-      : { data: [] as Mencao[] };
+      : { data: [] as MencaoResumida[] };
 
-  const mencoes = (todasAsMencoes ?? []) as Mencao[];
+  const mencoes = (todasAsMencoes ?? []) as MencaoResumida[];
 
   // ---- Resumo geral (todo o histórico) ----
   const totalPorStatus = { pendente: 0, publicado: 0, descartado_limite: 0, erro: 0 } as Record<
@@ -105,11 +99,15 @@ export default async function RelatoriosDeMencoesPage({ params }: { params: { id
     .filter((m) => new Date(m.recebido_em) >= limiteDetalhamento)
     .sort((a, b) => new Date(a.recebido_em).getTime() - new Date(b.recebido_em).getTime());
 
-  const porDia = new Map<string, Mencao[]>();
+  const porDia = new Map<string, { contagem: number; primeiroRecebidoEm: string }>();
   for (const m of mencoesRecentes) {
     const chave = chaveDoDia(m.recebido_em);
-    if (!porDia.has(chave)) porDia.set(chave, []);
-    porDia.get(chave)!.push(m);
+    const existente = porDia.get(chave);
+    if (existente) {
+      existente.contagem += 1;
+    } else {
+      porDia.set(chave, { contagem: 1, primeiroRecebidoEm: m.recebido_em });
+    }
   }
   const diasOrdenados = Array.from(porDia.keys()).sort((a, b) => (a < b ? 1 : -1));
 
@@ -131,10 +129,28 @@ export default async function RelatoriosDeMencoesPage({ params }: { params: { id
 
   return (
     <div>
-      <h1 className="font-display text-[22px] font-bold tracking-tight">Relatórios de Menções</h1>
-      <p className="mt-2 max-w-2xl text-[13px] text-neutral-400">
-        Visão geral de todas as menções de Story recebidas e republicadas, por loja e por dia.
-      </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="font-display text-[22px] font-bold tracking-tight">Relatórios de Menções</h1>
+          <p className="mt-2 max-w-2xl text-[13px] text-neutral-400">
+            Visão geral de todas as menções de Story recebidas e republicadas, por loja e por dia.
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <a
+            href={`/api/shoppings/${params.id}/relatorios/exportar?dias=15`}
+            className="rounded-[9px] border border-white/14 px-3.5 py-2 text-xs font-semibold text-neutral-200 hover:bg-white/5"
+          >
+            Exportar últimos 15 dias
+          </a>
+          <a
+            href={`/api/shoppings/${params.id}/relatorios/exportar?dias=30`}
+            className="rounded-[9px] border border-white/14 px-3.5 py-2 text-xs font-semibold text-neutral-200 hover:bg-white/5"
+          >
+            Exportar últimos 30 dias
+          </a>
+        </div>
+      </div>
 
       {/* Resumo geral */}
       <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -182,61 +198,17 @@ export default async function RelatoriosDeMencoesPage({ params }: { params: { id
           Histórico mais antigo continua disponível nos arquivos exportados, logo abaixo.
         </p>
 
-        <div className="mt-3.5 flex flex-col gap-3.5">
+        <div className="mt-3.5 flex flex-col gap-2.5">
           {diasOrdenados.map((chave) => {
-            const mencoesDoDia = porDia.get(chave)!;
+            const resumoDoDia = porDia.get(chave)!;
             return (
-              <div key={chave} className="rounded-2xl border border-white/8 bg-ink-900">
-                <div className="flex items-center justify-between border-b border-white/8 px-4 py-3">
-                  <p className="text-[13px] font-bold capitalize text-neutral-200">
-                    {formatarDataLonga(mencoesDoDia[0].recebido_em)}
-                  </p>
-                  <span className="rounded-full bg-white/8 px-2.5 py-1 text-[10.5px] font-semibold text-neutral-300">
-                    {mencoesDoDia.length} menç{mencoesDoDia.length === 1 ? "ão" : "ões"}
-                  </span>
-                </div>
-
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead>
-                      <tr className="text-neutral-500">
-                        <th className="px-4 py-2 font-semibold">Loja</th>
-                        <th className="px-2 py-2 font-semibold">@usuário</th>
-                        <th className="px-2 py-2 font-semibold">Postado</th>
-                        <th className="px-2 py-2 font-semibold">Republicado</th>
-                        <th className="px-2 py-2 font-semibold">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-white/8">
-                      {mencoesDoDia.map((m) => {
-                        const rotulo = ROTULO_DO_STATUS[m.status] ?? {
-                          texto: m.status,
-                          classe: "bg-white/8 text-neutral-400",
-                        };
-                        return (
-                          <tr key={m.id}>
-                            <td className="px-4 py-2.5 text-neutral-200">
-                              {nomePorLoja.get(m.loja_id) ?? "Loja removida"}
-                            </td>
-                            <td className="px-2 py-2.5 text-neutral-400">
-                              {m.instagram_username ? `@${m.instagram_username}` : "—"}
-                            </td>
-                            <td className="px-2 py-2.5 text-neutral-400">{formatarHora(m.recebido_em)}</td>
-                            <td className="px-2 py-2.5 text-neutral-400">
-                              {m.publicado_em ? formatarHora(m.publicado_em) : "—"}
-                            </td>
-                            <td className="px-2 py-2.5">
-                              <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold ${rotulo.classe}`}>
-                                {rotulo.texto.toUpperCase()}
-                              </span>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+              <DiaDeMencoesAccordion
+                key={chave}
+                shoppingId={params.id}
+                chaveDoDia={chave}
+                tituloFormatado={formatarDataLonga(resumoDoDia.primeiroRecebidoEm)}
+                totalDeMencoes={resumoDoDia.contagem}
+              />
             );
           })}
 
