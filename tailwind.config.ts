@@ -7,6 +7,16 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      // Sem isso, "/8", "/12" e "/14" (usados o app inteiro pra bordas e fundos bem sutis, tipo
+      // border-white/8) não geravam NENHUM CSS — o Tailwind só aceita opacidade "/N" se N estiver
+      // nessa escala (por padrão só tem 0,5,10,15,20,25,30,40,50,60,70,75,80,90,95,100). Sem a cor
+      // aplicada, a borda caía no padrão do navegador (branco, puxando a cor do texto) — foi o que
+      // deixou tudo com contorno branco duro e sem nenhum preenchimento (relatado em 06/09/2026).
+      opacity: {
+        8: "0.08",
+        12: "0.12",
+        14: "0.14",
+      },
       colors: {
         // Paleta do redesign (aprovada em 05/09/2026) — ink substitui os tons neutral-9xx usados
         // antes, accent substitui indigo/sky como cor de marca. Usar com opacidade via "/" do

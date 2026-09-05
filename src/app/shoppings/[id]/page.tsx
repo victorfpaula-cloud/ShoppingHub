@@ -1,6 +1,7 @@
 import { criarClienteAdmin } from "@/lib/supabase/admin";
 import { inicioDoDiaBrasiliaISO } from "@/lib/mencoes";
 import { iniciaisDoNome } from "@/lib/iniciais";
+import { BotaoAtualizar } from "@/components/BotaoAtualizar";
 
 export const dynamic = "force-dynamic";
 
@@ -131,15 +132,18 @@ export default async function LojasDoShoppingPage({
     <div>
       <div className="flex items-center justify-between gap-3">
         <h1 className="font-display text-[26px] font-bold tracking-tight">Lojas</h1>
-        <a
-          href={`/shoppings/${params.id}/lojas/novo`}
-          className="flex shrink-0 items-center gap-1.5 rounded-[10px] bg-accent px-4 py-2 text-[12.5px] font-bold text-white shadow-[0_8px_20px_-8px_rgba(124,110,242,0.55)] transition hover:bg-accent-strong"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round">
-            <path d="M12 5v14M5 12h14" />
-          </svg>
-          Nova loja
-        </a>
+        <div className="flex shrink-0 items-center gap-2">
+          <BotaoAtualizar />
+          <a
+            href={`/shoppings/${params.id}/lojas/novo`}
+            className="flex shrink-0 items-center gap-1.5 rounded-[10px] bg-accent px-4 py-2 text-[12.5px] font-bold text-white shadow-[0_8px_20px_-8px_rgba(124,110,242,0.55)] transition hover:bg-accent-strong"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+            Nova loja
+          </a>
+        </div>
       </div>
 
       <div className="mt-6 flex flex-col gap-3.5 sm:flex-row">

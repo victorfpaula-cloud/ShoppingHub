@@ -1,5 +1,6 @@
 import { criarClienteAdmin } from "@/lib/supabase/admin";
 import { BUCKET_MENCOES } from "@/lib/mencoes";
+import { BotaoAtualizar } from "@/components/BotaoAtualizar";
 
 export const dynamic = "force-dynamic";
 
@@ -63,7 +64,10 @@ export default async function FilaDeMencoesPage({
 
   return (
     <div>
-      <h1 className="font-display text-[26px] font-bold tracking-tight">Fila de menções de Stories</h1>
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="font-display text-[26px] font-bold tracking-tight">Fila de menções de Stories</h1>
+        <BotaoAtualizar />
+      </div>
       <p className="mt-2 max-w-2xl text-[13px] text-neutral-400">
         A publicação é automática, a cada poucos minutos — não tem botão de aprovar. Uma menção com
         erro tenta de novo sozinha algumas vezes antes de precisar de ação manual (tentar de novo ou

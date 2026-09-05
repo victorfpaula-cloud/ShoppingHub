@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { criarClienteAdmin } from "@/lib/supabase/admin";
-import { ShoppingSidebar } from "@/components/ShoppingSidebar";
+import { ShoppingTopNav } from "@/components/ShoppingTopNav";
 
 export const dynamic = "force-dynamic";
 
@@ -31,15 +31,8 @@ export default async function ShoppingLayout({
 
   return (
     <>
-      <ShoppingSidebar shoppingId={shopping.id} nome={shopping.nome} slug={shopping.slug} />
-      <div className="lg:pl-60">
-        <main className="mx-auto max-w-5xl px-6 py-8 lg:px-10 lg:py-10">
-          <div className="text-[11px] font-semibold tracking-wide text-neutral-500">
-            {shopping.nome.toUpperCase()}
-          </div>
-          <div className="mt-2">{children}</div>
-        </main>
-      </div>
+      <ShoppingTopNav shoppingId={shopping.id} nome={shopping.nome} slug={shopping.slug} />
+      <main className="mx-auto max-w-5xl px-6 py-8 lg:px-10 lg:py-10">{children}</main>
     </>
   );
 }
