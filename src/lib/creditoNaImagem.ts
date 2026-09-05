@@ -14,13 +14,18 @@ export function ehImagem(contentType: string): boolean {
   return contentType.includes("image");
 }
 
-// Fração da altura onde fica o CENTRO do selo e da marcação nativa (user_tags, ver
-// metaMessaging.ts) — os dois usam o MESMO valor pra ficarem alinhados. Não pode ficar muito perto
-// do rodapé (~0.92, testado em 04/09/2026): a barra de "responder" que o próprio Instagram desenha
-// por cima da Story intercepta o toque nessa faixa inferior (~13% de baixo). 0.80 fica dentro da
-// área segura (a Meta recomenda evitar os ~13% de cima e de baixo da tela pra qualquer elemento
-// interativo).
-export const POSICAO_Y_CREDITO = 0.8;
+// Fração da altura onde fica o CENTRO da marcação nativa (user_tags, ver metaMessaging.ts) — não
+// pode ficar muito perto do rodapé (~0.92, testado em 04/09/2026): a barra de "responder" que o
+// próprio Instagram desenha por cima da Story intercepta o toque nessa faixa inferior (~13% de
+// baixo). 0.80 fica dentro da área segura (a Meta recomenda evitar os ~13% de cima e de baixo da
+// tela pra qualquer elemento interativo).
+export const POSICAO_Y_TAG_NATIVA = 0.8;
+
+// Fração da altura onde fica o CENTRO do selo queimado (nome/@usuário) — pedido em 06/09/2026 pra
+// ficar logo abaixo do cabeçalho da Story (onde aparece a conta que postou), em vez de perto do
+// rodapé. 0.15 fica logo depois da faixa de ~13% do topo que a Meta recomenda evitar (mesma lógica
+// do rodapé acima, só que espelhada), sem entrar em cima do cabeçalho.
+export const POSICAO_Y_SELO = 0.15;
 
 // Selo pequeno (formato pílula, cantos arredondados) em vez da faixa preta de ponta a ponta que
 // tinha antes — achada "exagerada" na prática (relatado em 05/09/2026). Mais parecido com o
@@ -28,7 +33,7 @@ export const POSICAO_Y_CREDITO = 0.8;
 const PROPORCAO_ALTURA_SELO = 0.032; // relativa à LARGURA de referência (ver gerarSeloDeCredito)
 const PROPORCAO_FONTE_NO_SELO = 0.5; // relativa à altura do selo
 const PROPORCAO_PADDING_HORIZONTAL = 0.85; // relativa à altura do selo, de cada lado do texto
-const OPACIDADE_DO_FUNDO = 0.45;
+const OPACIDADE_DO_FUNDO = 0.62; // menos transparente que antes (0.45) — pedido em 06/09/2026
 
 // O texto vira contorno vetorial (path) em vez de <text> no SVG — funções serverless não têm
 // nenhuma fonte instalada, então `<text font-family="Arial">` renderiza como "tofu" (quadradinhos
@@ -98,7 +103,7 @@ export async function adicionarFaixaDeCredito(
 
   const selo = await gerarSeloDeCredito(username, largura);
   const left = Math.round((largura - selo.largura) / 2);
-  const top = Math.round(altura * POSICAO_Y_CREDITO - selo.altura / 2);
+  const top = Math.round(altura * POSICAO_Y_SELO - selo.altura / 2);
 
   const resultado = await imagem
     .composite([{ input: selo.png, left, top }])

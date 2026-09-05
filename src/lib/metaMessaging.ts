@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { POSICAO_Y_CREDITO } from "./creditoNaImagem";
+import { POSICAO_Y_TAG_NATIVA } from "./creditoNaImagem";
 
 const GRAPH_API_VERSION = "v21.0";
 
@@ -206,9 +206,10 @@ async function aguardarContainerPronto(
  *
  * `usernameParaMarcar`, quando informado, usa o campo `user_tags` (suportado pra Stories de
  * imagem e vídeo desde 09/07/2025) pra marcar a loja que gerou a menção — {x, y} é a posição
- * declarada da marcação na mídia (0.0–1.0, a partir do canto superior esquerdo). Usa a MESMA
- * posição vertical da faixa de crédito da imagem (`POSICAO_Y_CREDITO`, ver creditoNaImagem.ts) só
- * por consistência.
+ * declarada da marcação na mídia (0.0–1.0, a partir do canto superior esquerdo). Usa
+ * `POSICAO_Y_TAG_NATIVA` (ver creditoNaImagem.ts) — posição independente do selo queimado
+ * (`POSICAO_Y_SELO`), que fica perto do topo; essa marcação nativa fica perto do rodapé, dentro da
+ * área segura que a Meta recomenda pra elementos interativos.
  *
  * Confirmado na prática em 05/09/2026: essa marcação aparece sim, visível, na Story publicada —
  * um "chip" com o nome da conta marcada e uma seta pra abrir o perfil dela (parecido com uma
@@ -231,7 +232,7 @@ export async function publicarStoryNoInstagram(
   // teste real (04/09/2026) mostrou a Story publicando normal mas sem nenhuma marcação, porque a
   // Meta recebia um texto no lugar de uma lista e ignorava a marcação sem dar erro.
   const camposDeMarcacao = usernameParaMarcar
-    ? { user_tags: [{ username: usernameParaMarcar, x: 0.5, y: POSICAO_Y_CREDITO }] }
+    ? { user_tags: [{ username: usernameParaMarcar, x: 0.5, y: POSICAO_Y_TAG_NATIVA }] }
     : {};
 
   // Log de diagnóstico (adicionado em 05/09/2026, depois de uma Story ir pro ar sem a marcação
