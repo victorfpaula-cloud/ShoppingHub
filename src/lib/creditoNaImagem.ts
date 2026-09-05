@@ -7,9 +7,10 @@ import { readFile } from "node:fs/promises";
  * Sobrepõe uma faixa semitransparente com o @usuário de quem marcou o shopping no Story, antes
  * de guardar/publicar — dá crédito visível à loja na Story republicada.
  *
- * Só funciona pra IMAGEM (usa sharp, biblioteca de imagem raster). Vídeo recebe a mesma faixa,
- * na mesma posição (`POSICAO_Y_CREDITO`, exportada daqui), mas queimada via ffmpeg dentro de
- * `comprimirVideo.ts` — quem chama essa função já lida com esse caso (`ehImagem` abaixo).
+ * Só funciona pra IMAGEM (usa sharp, biblioteca de imagem raster). Vídeo não recebe faixa nenhuma
+ * — a marcação nativa da Meta (`user_tags`, ver metaMessaging.ts) já aparece visível sozinha,
+ * confirmado na prática em 05/09/2026 — quem chama essa função já lida com esse caso (`ehImagem`
+ * abaixo).
  */
 export function ehImagem(contentType: string): boolean {
   return contentType.includes("image");

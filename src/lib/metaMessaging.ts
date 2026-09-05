@@ -206,17 +206,14 @@ async function aguardarContainerPronto(
  *
  * `usernameParaMarcar`, quando informado, usa o campo `user_tags` (suportado pra Stories de
  * imagem e vídeo desde 09/07/2025) pra marcar a loja que gerou a menção — {x, y} é a posição
- * declarada da marcação na mídia (0.0–1.0, a partir do canto superior esquerdo), exigida pela
- * Meta mesmo sem efeito visual (ver abaixo). Usa a MESMA posição vertical da faixa de crédito
- * (`POSICAO_Y_CREDITO`, ver creditoNaImagem.ts) só por consistência.
+ * declarada da marcação na mídia (0.0–1.0, a partir do canto superior esquerdo). Usa a MESMA
+ * posição vertical da faixa de crédito da imagem (`POSICAO_Y_CREDITO`, ver creditoNaImagem.ts) só
+ * por consistência.
  *
- * IMPORTANTE (confirmado em 05/09/2026, depois de duas Stories publicadas sem nenhuma marcação
- * visível mesmo com o container criado sem erro nenhum): esse `user_tags` NÃO desenha nenhuma
- * figurinha/selo visível na Story — a documentação oficial da Meta é explícita que publicar
- * "stickers" (que é como ela classifica a marcação visual, clicável) não é suportado pela Content
- * Publishing API, só a menção "sem sticker" (nos bastidores). Quem dá o crédito visível de verdade
- * é a faixa queimada na própria mídia (`adicionarFaixaDeCredito` pra imagem, dentro de
- * `comprimirVideo` pra vídeo) — isso aqui só serve pra notificar a loja de que foi mencionada.
+ * Confirmado na prática em 05/09/2026: essa marcação aparece sim, visível, na Story publicada —
+ * um "chip" com o nome da conta marcada e uma seta pra abrir o perfil dela (parecido com uma
+ * marcação de local). Ele mostra o NOME de exibição configurado no perfil da loja, não o
+ * `@usuário` — isso é a própria Meta que decide como desenhar, não dá pra mudar por aqui.
  */
 export async function publicarStoryNoInstagram(
   tokenDaConta: string,
