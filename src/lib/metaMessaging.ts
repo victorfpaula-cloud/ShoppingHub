@@ -155,29 +155,45 @@ async function aguardarContainerPronto(
   const TENTATIVAS_MAXIMAS = tipoDeMidia === "VIDEO" ? 20 : 6;
   const INTERVALO_MS = 2000;
 
+  // Guarda a última resposta da Meta (bruta) pra logar em caso de erro/timeout — sem isso, um
+  // container que nunca sai de "IN_PROGRESS" só dá uma mensagem genérica, sem pista nenhuma do
+  // motivo real (formato/duração/tamanho do vídeo, por exemplo).
+  let ultimaRespostaBruta = "(nenhuma resposta recebida)";
+
   for (let tentativa = 0; tentativa < TENTATIVAS_MAXIMAS; tentativa++) {
     const resposta = await fetch(
-      `https://graph.facebook.com/${GRAPH_API_VERSION}/${containerId}?fields=status_code&access_token=${encodeURIComponent(
+      `https://graph.facebook.com/${GRAPH_API_VERSION}/${containerId}?fields=status_code,status&access_token=${encodeURIComponent(
         tokenDaConta
       )}`,
       { cache: "no-store" }
     );
 
+    ultimaRespostaBruta = await resposta.text().catch(() => ultimaRespostaBruta);
+
     if (resposta.ok) {
-      const dados = await resposta.json();
+      let dados: any = null;
+      try {
+        dados = JSON.parse(ultimaRespostaBruta);
+      } catch {
+        // segue com dados null — o texto bruto já fica registrado em ultimaRespostaBruta
+      }
       const statusCode = dados?.status_code as string | undefined;
 
       if (statusCode === "FINISHED") return;
 
       if (statusCode === "ERROR") {
-        throw new Error("A Meta reportou erro ao processar a mídia da Story (container em ERROR).");
+        throw new Error(
+          `A Meta reportou erro ao processar a mídia da Story (container em ERROR): ${ultimaRespostaBruta}`
+        );
       }
     }
 
     await new Promise((resolve) => setTimeout(resolve, INTERVALO_MS));
   }
 
-  throw new Error("A mídia da Story não ficou pronta a tempo (container nunca chegou a FINISHED).");
+  throw new Error(
+    `A mídia da Story não ficou pronta a tempo (container nunca chegou a FINISHED). Última resposta da Meta: ${ultimaRespostaBruta}`
+  );
 }
 
 /**
