@@ -175,7 +175,7 @@ export default async function LojasDoShoppingPage({
             <a
               key={loja.id}
               href={`/shoppings/${params.id}/lojas/${loja.id}`}
-              className={`relative flex h-[132px] flex-col rounded-2xl border bg-ink-900 px-5 py-[18px] transition hover:-translate-y-0.5 ${
+              className={`flex h-[160px] flex-col rounded-2xl border bg-ink-900 px-5 py-[18px] transition hover:-translate-y-0.5 ${
                 loja.eh_geral
                   ? "border-sky-400/35 shadow-[0_0_0_1px_rgba(56,165,255,0.1),0_0_32px_-10px_rgba(56,165,255,0.6)]"
                   : loja.ativo
@@ -183,24 +183,6 @@ export default async function LojasDoShoppingPage({
                   : "border-danger/25 opacity-70 shadow-[0_16px_36px_-22px_rgba(0,0,0,0.7)]"
               }`}
             >
-              {(publicadosHojeDaLoja > 0 || errosDaLoja > 0) && (
-                <div className="absolute -top-2.5 right-4 flex items-center gap-1.5">
-                  {publicadosHojeDaLoja > 0 && (
-                    <span className="flex items-center gap-1 rounded-full bg-accent px-2.5 py-1 text-[10.5px] font-bold text-white shadow-[0_6px_14px_-4px_rgba(124,110,242,0.5)]">
-                      <svg viewBox="0 0 20 20" fill="currentColor" className="h-2.5 w-2.5">
-                        <path d="M16.7 5.3a1 1 0 0 1 0 1.4l-8 8a1 1 0 0 1-1.4 0l-4-4a1 1 0 1 1 1.4-1.4L8 12.6l7.3-7.3a1 1 0 0 1 1.4 0Z" />
-                      </svg>
-                      {publicadosHojeDaLoja} hoje
-                    </span>
-                  )}
-                  {errosDaLoja > 0 && (
-                    <span className="rounded-full bg-danger px-2.5 py-1 text-[10.5px] font-bold text-white shadow-[0_6px_14px_-4px_rgba(248,113,113,0.5)]">
-                      {errosDaLoja} com erro
-                    </span>
-                  )}
-                </div>
-              )}
-
               <div className="flex items-center justify-between gap-2">
                 <div className="flex min-w-0 items-center gap-2.5">
                   <div
@@ -242,6 +224,22 @@ export default async function LojasDoShoppingPage({
                 <span className="shrink-0 rounded-full border border-white/12 px-2.5 py-1 text-[11px] font-semibold text-neutral-400">
                   {loja.base_conhecimento_texto?.trim() ? "Com base" : "Sem base"}
                 </span>
+              </div>
+
+              <div className="mt-1.5 flex items-center gap-1.5">
+                {publicadosHojeDaLoja > 0 && (
+                  <span className="flex items-center gap-1 rounded-full bg-accent/15 px-2.5 py-1 text-[10.5px] font-bold text-accent-strong">
+                    <svg viewBox="0 0 20 20" fill="currentColor" className="h-2.5 w-2.5">
+                      <path d="M16.7 5.3a1 1 0 0 1 0 1.4l-8 8a1 1 0 0 1-1.4 0l-4-4a1 1 0 1 1 1.4-1.4L8 12.6l7.3-7.3a1 1 0 0 1 1.4 0Z" />
+                    </svg>
+                    {publicadosHojeDaLoja} hoje
+                  </span>
+                )}
+                {errosDaLoja > 0 && (
+                  <span className="rounded-full bg-danger/15 px-2.5 py-1 text-[10.5px] font-bold text-danger">
+                    {errosDaLoja} com erro
+                  </span>
+                )}
               </div>
             </a>
           );
