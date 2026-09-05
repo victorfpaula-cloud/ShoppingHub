@@ -6,11 +6,13 @@ import { comprimirVideo } from "@/lib/comprimirVideo";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-// Ferramenta de uso único (05/09/2026): reprocessa vídeos de menções que já estavam na fila
-// (pendentes ou com erro) ANTES da compressão automática existir, sem precisar que o lojista
-// poste de novo. Baixa o vídeo já guardado no Storage, corta/recomprime do mesmo jeito que uma
-// menção nova recebe hoje (ver src/lib/comprimirVideo.ts), sobrescreve o arquivo no mesmo lugar,
-// e reseta pra "pendente" quem tinha ficado "erro". Pode ser apagada depois de usada — não faz
+// Ferramenta de manutenção (05/09/2026): reprocessa vídeos de menções que já estavam na fila
+// (pendentes ou com erro) do jeito que uma menção nova recebe hoje (ver src/lib/comprimirVideo.ts)
+// — sem precisar que o lojista poste de novo. Serviu pra destravar o backlog quando a compressão
+// automática foi criada, e serve de novo toda vez que o processamento de vídeo muda (por exemplo,
+// quando o selo de crédito queimado no vídeo foi adicionado — vídeos já na fila antes disso não
+// tinham selo até rodar essa ferramenta de novo). Baixa o vídeo já guardado no Storage, reprocessa,
+// sobrescreve o arquivo no mesmo lugar, e reseta pra "pendente" quem tinha ficado "erro". Não faz
 // nada sozinha, só roda quando alguém abre a URL com o segredo certo.
 export async function GET(request: NextRequest) {
   const segredoRecebido = request.nextUrl.searchParams.get("secret");
@@ -24,7 +26,7 @@ export async function GET(request: NextRequest) {
 
   const { data: mencoes, error } = await admin
     .from("shoppinghub_mencoes")
-    .select("id, status, storage_path")
+    .select("id, status, storage_path, instagram_username")
     .in("status", ["pendente", "erro"])
     .not("storage_path", "is", null)
     .like("storage_path", "%.mp4");
@@ -66,7 +68,7 @@ export async function GET(request: NextRequest) {
       }
 
       const bytesOriginais = new Uint8Array(await arquivo.arrayBuffer());
-      const comprimido = await comprimirVideo(bytesOriginais);
+      const comprimido = await comprimirVideo(bytesOriginais, mencao.instagram_username ?? "");
 
       const { error: erroUpload } = await admin.storage
         .from(BUCKET_MENCOES)

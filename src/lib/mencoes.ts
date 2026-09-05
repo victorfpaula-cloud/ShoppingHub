@@ -152,14 +152,13 @@ export async function processarMencaoRecebida(
   }
 
   try {
-    // Imagem: dá crédito à loja sobrepondo uma faixa com o @usuário dela no rodapé, antes de
-    // guardar. Vídeo: corta pros primeiros 10s e recomprime num formato garantidamente compatível
-    // — evita vídeos longos/grandes travando pra sempre no processamento da Meta (ver
-    // comprimirVideo.ts); não precisa de faixa própria, a marcação nativa da Meta (user_tags) já
-    // aparece visível na Story.
+    // Imagem: dá crédito à loja sobrepondo um selo com o @usuário dela, antes de guardar. Vídeo:
+    // corta pros primeiros 10s, recomprime num formato garantidamente compatível — evita vídeos
+    // longos/grandes travando pra sempre no processamento da Meta — e queima o mesmo selo (a
+    // marcação nativa da Meta em vídeo fica invisível até tocar na tela, ver comprimirVideo.ts).
     const midiaFinal = ehImagem(midia.contentType)
       ? await adicionarFaixaDeCredito(midia.bytes, username)
-      : await comprimirVideo(midia.bytes);
+      : await comprimirVideo(midia.bytes, username);
 
     const { storagePath } = await subirMidiaDeMencao(
       admin,

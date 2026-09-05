@@ -4,54 +4,35 @@ import { promisify } from "node:util";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
+import { gerarSeloDeCredito, POSICAO_Y_CREDITO } from "./creditoNaImagem";
 
 const execFileAsync = promisify(execFile);
 
 const DURACAO_MAXIMA_SEGUNDOS = 10;
-// Margem sobre o corte de 10s — dá espaço pra pequena imprecisão de arredondamento do ffmpeg sem
-// achar que um vídeo já cortado por essa mesma função "ainda precisa" ser reprocessado.
-const DURACAO_JA_OK_SEGUNDOS = DURACAO_MAXIMA_SEGUNDOS + 0.5;
+
+// Vídeo é sempre reduzido a essa largura no máximo (ver filtro de scale abaixo) — usada também
+// como referência de tamanho pro selo (ver gerarSeloDeCredito em creditoNaImagem.ts), já que sondar
+// a resolução real do vídeo de entrada só pra isso seria complexidade extra sem necessidade: o
+// filtro overlay do ffmpeg posiciona o selo pela largura/altura REAIS do vídeo em tempo de
+// execução (variáveis main_w/main_h), então só o TAMANHO do selo em si fica calibrado pra 1080 —
+// looks right pra qualquer vídeo que já sai nessa largura (a maioria) ou perto dela.
+const LARGURA_DE_REFERENCIA_PARA_SELO = 1080;
 
 /**
- * Lê a duração do vídeo sem precisar do ffprobe (não vem junto com o ffmpeg-static) — truque
- * conhecido: rodar o ffmpeg só com `-i` (sem arquivo de saída) sempre "falha", mas antes de falhar
- * ele imprime os metadados do arquivo (incluindo "Duration: HH:MM:SS.ms") no stderr.
- */
-async function obterDuracaoSegundos(caminhoArquivo: string): Promise<number | null> {
-  try {
-    await execFileAsync(ffmpegPath!, ["-i", caminhoArquivo, "-hide_banner"]);
-    return null;
-  } catch (erro) {
-    const stderr = (erro as { stderr?: string })?.stderr ?? "";
-    const encontrado = stderr.match(/Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/);
-    if (!encontrado) return null;
-    const [, horas, minutos, segundos] = encontrado;
-    return Number(horas) * 3600 + Number(minutos) * 60 + Number(segundos);
-  }
-}
-
-/**
- * Corta o vídeo pros primeiros 10 segundos e recomprime num formato garantidamente compatível
- * (H.264 + AAC, largura limitada a 1080px) antes de guardar/publicar. Feito na hora que a menção
- * chega (não na hora de publicar) — resolve de uma vez: vídeos longos ou muito grandes que a Meta
- * nunca terminava de processar (visto na prática em 05/09/2026, container preso em "IN_PROGRESS"
- * mesmo com quase um minuto de espera), e reduz o espaço ocupado no Storage.
+ * Corta o vídeo pros primeiros 10 segundos, recomprime num formato garantidamente compatível
+ * (H.264 + AAC, largura limitada a 1080px) e queima o MESMO selo de crédito usado na imagem (ver
+ * creditoNaImagem.ts), na mesma posição vertical (POSICAO_Y_CREDITO) — tudo numa única passada de
+ * ffmpeg, pra não recodificar duas vezes.
  *
- * Não queima nenhuma faixa de crédito no vídeo (diferente da imagem, ver creditoNaImagem.ts) — a
- * própria marcação nativa da Meta (`user_tags`, ver metaMessaging.ts) já aparece visível na Story
- * publicada, mostrando o nome da conta marcada, confirmado na prática em 05/09/2026. Chegou a ser
- * testada uma faixa queimada via ffmpeg (drawbox+drawtext) achando que a marcação nativa não
- * aparecia, mas depois de ver a Story de verdade publicada, a marcação nativa já resolve sozinha.
- *
- * Se o vídeo já tem 10s ou menos (por exemplo, já passou por essa função antes — a ferramenta de
- * recomprimir vídeos antigos processa a mesma lista inteira a cada vez que é aberta, já que não
- * guarda "o que já foi feito"), pula a recompressão e devolve os bytes originais direto — sem essa
- * checagem, reprocessar os mesmos vídeos já certos toda hora consumia o tempo todo da execução
- * antes de chegar nos que realmente ainda precisavam (visto na prática em 05/09/2026: os mesmos 5
- * vídeos ficavam de fora em toda tentativa).
+ * O selo é necessário porque, diferente de imagem (onde a marcação nativa da Meta, `user_tags`,
+ * aparece visível sozinha), em VÍDEO essa mesma marcação fica completamente invisível até o
+ * espectador tocar na tela — sem nenhuma pista visual de que existe ou de onde tocar (relatado na
+ * prática em 05/09/2026, comparando lado a lado com uma Story de foto onde a marcação aparecia
+ * normalmente). O selo dá essa pista.
  */
 export async function comprimirVideo(
-  bytes: Uint8Array
+  bytes: Uint8Array,
+  username: string
 ): Promise<{ bytes: Uint8Array; contentType: string }> {
   if (!ffmpegPath) {
     throw new Error("Binário do ffmpeg não encontrado (ffmpeg-static).");
@@ -59,24 +40,39 @@ export async function comprimirVideo(
 
   const pastaTemporaria = await mkdtemp(path.join(os.tmpdir(), "video-mencao-"));
   const caminhoEntrada = path.join(pastaTemporaria, "entrada.mp4");
+  const caminhoSelo = path.join(pastaTemporaria, "selo.png");
   const caminhoSaida = path.join(pastaTemporaria, "saida.mp4");
 
   try {
     await writeFile(caminhoEntrada, Buffer.from(bytes));
 
-    const duracaoAtual = await obterDuracaoSegundos(caminhoEntrada);
-    if (duracaoAtual !== null && duracaoAtual <= DURACAO_JA_OK_SEGUNDOS) {
-      return { bytes, contentType: "video/mp4" };
-    }
+    const selo = await gerarSeloDeCredito(username, LARGURA_DE_REFERENCIA_PARA_SELO);
+    await writeFile(caminhoSelo, selo.png);
+
+    // `-loop 1` faz o ffmpeg tratar o PNG estático do selo como um vídeo contínuo (sem isso, o
+    // overlay só apareceria no primeiro frame) — o `-t` na saída garante que tudo pare nos 10s
+    // certos mesmo com essa "duração infinita" do selo.
+    const filtro = [
+      "[0:v]scale='min(1080,iw)':-2[base]",
+      `[base][1:v]overlay=x='(main_w-overlay_w)/2':y='main_h*${POSICAO_Y_CREDITO}-overlay_h/2'[saida]`,
+    ].join(";");
 
     await execFileAsync(ffmpegPath, [
       "-y",
       "-i",
       caminhoEntrada,
+      "-loop",
+      "1",
+      "-i",
+      caminhoSelo,
       "-t",
       String(DURACAO_MAXIMA_SEGUNDOS),
-      "-vf",
-      "scale='min(1080,iw)':-2",
+      "-filter_complex",
+      filtro,
+      "-map",
+      "[saida]",
+      "-map",
+      "0:a?",
       "-c:v",
       "libx264",
       "-preset",
