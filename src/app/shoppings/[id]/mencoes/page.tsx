@@ -88,7 +88,9 @@ export default async function FilaDeMencoesPage({
             classe: "border-neutral-700 bg-neutral-900 text-neutral-400",
           };
 
-          const urlDaMidia = mencao.storage_path
+          const ehVideo = mencao.storage_path?.endsWith(".mp4") ?? false;
+
+          const urlDaMidia = mencao.storage_path && !ehVideo
             ? admin.storage.from(BUCKET_MENCOES).getPublicUrl(mencao.storage_path).data.publicUrl
             : null;
 
@@ -104,6 +106,18 @@ export default async function FilaDeMencoesPage({
                   alt=""
                   className="h-12 w-12 shrink-0 rounded-lg object-cover"
                 />
+              )}
+
+              {ehVideo && (
+                // Nunca aponta pro arquivo de vídeo direto aqui — alguns navegadores (Safari no
+                // iPhone/iPad, principalmente) tocam o vídeo como se fosse um GIF animado dentro
+                // da miniatura. Com várias menções de vídeo na fila ao mesmo tempo, isso trava a
+                // página (relatado em 05/09/2026). Só um ícone fixo, sem baixar o vídeo.
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-neutral-900 text-neutral-500">
+                  <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+                    <path d="M4 4a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2H4Zm11.5 2.5 3-1.75a.75.75 0 0 1 1.13.65v8.2a.75.75 0 0 1-1.13.65l-3-1.75v-6Z" />
+                  </svg>
+                </div>
               )}
 
               <div className="min-w-0 flex-1">
