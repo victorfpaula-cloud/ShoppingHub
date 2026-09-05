@@ -48,40 +48,46 @@ export function ShoppingTopNav({
   const pathname = usePathname() ?? "";
 
   const base = `/shoppings/${shoppingId}`;
-  const itens: { href: string; label: string; icone: ReactNode; ativo: boolean }[] = [
+  const itens: { href: string; label: string; labelCurto: string; icone: ReactNode; ativo: boolean }[] = [
     {
       href: base,
       label: "Lojas",
+      labelCurto: "Lojas",
       icone: ICONE_LOJAS,
       ativo: pathname === base || pathname.startsWith(`${base}/lojas/`),
     },
     {
       href: `${base}/conta`,
       label: "Conta do Instagram",
+      labelCurto: "Conta IG",
       icone: ICONE_CONTA,
       ativo: pathname.startsWith(`${base}/conta`),
     },
     {
       href: `${base}/mencoes`,
       label: "Fila de menções",
+      labelCurto: "Menções",
       icone: ICONE_MENCOES,
       ativo: pathname.startsWith(`${base}/mencoes`),
     },
     {
       href: `${base}/relatorios`,
       label: "Relatórios",
+      labelCurto: "Relatórios",
       icone: ICONE_RELATORIOS,
       ativo: pathname.startsWith(`${base}/relatorios`),
     },
     {
       href: `${base}/atendimentos`,
       label: "Atendimentos",
+      labelCurto: "Atend.",
       icone: ICONE_ATENDIMENTOS,
       ativo: pathname.startsWith(`${base}/atendimentos`),
     },
     {
       href: `${base}/guardrails`,
       label: "Guardrails",
+      labelCurto: "Guardrails",
       icone: ICONE_GUARDRAILS,
       ativo: pathname.startsWith(`${base}/guardrails`),
     },
@@ -104,22 +110,20 @@ export function ShoppingTopNav({
           </div>
         </div>
 
-        <nav
-          className="scrollbar-none mt-3 flex gap-1 overflow-x-auto"
-          style={{ scrollbarWidth: "none" }}
-        >
+        <nav className="mt-3 grid grid-cols-3 gap-1.5 pb-3 sm:flex sm:gap-1 sm:overflow-x-auto sm:pb-0">
           {itens.map((item) => (
             <a
               key={item.href}
               href={item.href}
-              className={`flex shrink-0 items-center gap-2 whitespace-nowrap rounded-t-lg px-3 py-2 text-[12.5px] font-semibold transition ${
+              className={`flex flex-col items-center justify-center gap-1 rounded-xl px-1.5 py-2.5 text-center text-[10.5px] font-semibold leading-tight transition sm:flex-row sm:shrink-0 sm:justify-start sm:gap-2 sm:whitespace-nowrap sm:rounded-t-lg sm:rounded-b-none sm:px-3 sm:py-2 sm:text-[12.5px] ${
                 item.ativo
                   ? "bg-ink-900 text-neutral-100 [&_svg]:text-accent-strong"
-                  : "text-neutral-500 hover:bg-white/5 hover:text-neutral-300"
+                  : "bg-white/[0.03] text-neutral-500 hover:bg-white/5 hover:text-neutral-300 sm:bg-transparent"
               }`}
             >
               {item.icone}
-              {item.label}
+              <span className="sm:hidden">{item.labelCurto}</span>
+              <span className="hidden sm:inline">{item.label}</span>
             </a>
           ))}
         </nav>

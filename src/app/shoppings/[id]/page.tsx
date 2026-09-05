@@ -5,53 +5,60 @@ import { BotaoAtualizar } from "@/components/BotaoAtualizar";
 
 export const dynamic = "force-dynamic";
 
-// Cores de avatar por índice, só pra lojas ativas e não-fallback (dá uma variação visual bonita
-// no grid) — loja inativa ou a "Geral" (fallback) sempre usa o avatar neutro, pra não competir com
-// as lojas de verdade.
-const CORES_AVATAR = [
-  ["#8f82ff", "#6a5bde"],
-  ["#5fd0c0", "#2f9a8d"],
-  ["#ff9d7a", "#d9673f"],
-  ["#7ea8ff", "#4a6fd6"],
-  ["#f2a7c8", "#c2568f"],
-  ["#a3e178", "#5a9c3f"],
-] as const;
+// Avatar de loja sempre no mesmo tom de roxo (pedido em 06/09/2026 — o grid com várias cores por
+// índice ficava poluído visualmente); só a "Geral" (fallback) ou loja inativa usa o tom neutro, pra
+// não competir com as lojas de verdade.
+const COR_AVATAR: readonly [string, string] = ["#8f82ff", "#6a5bde"];
 
-function CartaoDeEstatistica({
-  rotulo,
+function formatarHora(iso: string): string {
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(iso));
+}
+
+function CartaoDePublicacoes({
   valor,
-  icone,
-  corIcone,
-  corFundoIcone,
-  corBarra,
-  larguraPercentual,
+  totalErros,
+  ultimaPublicacao,
 }: {
-  rotulo: string;
   valor: number;
-  icone: React.ReactNode;
-  corIcone: string;
-  corFundoIcone: string;
-  corBarra: string;
-  larguraPercentual: number;
+  totalErros: number;
+  ultimaPublicacao: string | null;
 }) {
   return (
     <div className="flex-1 rounded-2xl border border-white/8 bg-ink-900 p-5">
-      <div className="flex items-center gap-2.5">
-        <div
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px]"
-          style={{ backgroundColor: corFundoIcone, color: corIcone }}
-        >
-          {icone}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2.5">
+          <div
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px]"
+            style={{ backgroundColor: "rgba(52,211,153,0.13)", color: "#34d399" }}
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 6L9 17l-5-5" />
+            </svg>
+          </div>
+          <span className="text-xs font-semibold text-neutral-400">Publicados hoje</span>
         </div>
-        <span className="text-xs font-semibold text-neutral-400">{rotulo}</span>
+        {totalErros > 0 && (
+          <span className="flex shrink-0 items-center gap-1 rounded-full bg-danger/15 px-2.5 py-1 text-[11px] font-bold text-danger">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round">
+              <path d="M12 8v5M12 16.5h.01" />
+              <circle cx="12" cy="12" r="9" />
+            </svg>
+            {totalErros} com erro
+          </span>
+        )}
       </div>
       <div className="font-display mt-3.5 text-[32px] font-bold leading-none">{valor}</div>
-      <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-ink-850">
-        <div
-          className="h-full rounded-full transition-all duration-700"
-          style={{ width: `${larguraPercentual}%`, backgroundColor: corBarra }}
-        />
-      </div>
+      <p className="mt-2.5 text-[11px] font-semibold text-neutral-500">
+        {ultimaPublicacao
+          ? `Última publicação às ${formatarHora(ultimaPublicacao)}`
+          : "Nenhuma publicação ainda"}
+      </p>
     </div>
   );
 }
@@ -73,20 +80,12 @@ export default async function LojasDoShoppingPage({
 
   const idsDasLojas = (lojas ?? []).map((l) => l.id);
 
-  // Publicação hoje roda a cada poucos minutos (ver .github/workflows/publicar-mencoes.yml), não
-  // mais em dois horários fixos — não faz mais sentido contar por "ciclo entre crons". "Aguardando
-  // publicar" agora é simplesmente quem ainda está com status pendente; "Publicados hoje" usa a
-  // meia-noite de Brasília como corte, igual ao limite diário de menções por loja.
+  // Publicação roda a cada poucos minutos, continuamente (ver
+  // .github/workflows/publicar-mencoes.yml) — o painel não precisa mais mostrar "aguardando
+  // publicar" (não ajudava, já que o item some da fila em minutos); o que importa pra loja e pro
+  // shopping é o resultado do dia. "Publicados hoje" usa a meia-noite de Brasília como corte,
+  // igual ao limite diário de menções por loja.
   const inicioDoDia = inicioDoDiaBrasiliaISO();
-
-  const { data: mencoesPendentes } =
-    idsDasLojas.length > 0
-      ? await admin
-          .from("shoppinghub_mencoes")
-          .select("loja_id")
-          .in("loja_id", idsDasLojas)
-          .eq("status", "pendente")
-      : { data: [] as { loja_id: string }[] };
 
   const { data: mencoesPublicadasHoje } =
     idsDasLojas.length > 0
@@ -98,8 +97,7 @@ export default async function LojasDoShoppingPage({
           .gte("publicado_em", inicioDoDia)
       : { data: [] as { loja_id: string }[] };
 
-  // Badge por loja mostra quantas publicações saíram HOJE (e não mais "N aguardando", que não
-  // ajudava a loja a ver o próprio resultado do dia) e, se tiver alguma com erro, avisa isso
+  // Badge por loja mostra quantas publicações saíram HOJE e, se tiver alguma com erro, avisa isso
   // também — os dois contadores por loja vêm dessas duas buscas.
   const { data: mencoesComErro } =
     idsDasLojas.length > 0
@@ -110,6 +108,20 @@ export default async function LojasDoShoppingPage({
           .eq("status", "erro")
       : { data: [] as { loja_id: string }[] };
 
+  // Última publicação de qualquer loja do shopping, pra mostrar o horário junto do card de
+  // "Publicados hoje" (pedido em 06/09/2026) — pode ser de antes de hoje se nada saiu ainda hoje.
+  const { data: ultimaPublicacaoLinha } =
+    idsDasLojas.length > 0
+      ? await admin
+          .from("shoppinghub_mencoes")
+          .select("publicado_em")
+          .in("loja_id", idsDasLojas)
+          .eq("status", "publicado")
+          .order("publicado_em", { ascending: false })
+          .limit(1)
+          .maybeSingle()
+      : { data: null };
+
   function contarPorLoja(linhas: { loja_id: string }[]): Map<string, number> {
     const mapa = new Map<string, number>();
     for (const linha of linhas) {
@@ -118,15 +130,11 @@ export default async function LojasDoShoppingPage({
     return mapa;
   }
 
-  const pendentesPorLoja = contarPorLoja(mencoesPendentes ?? []);
   const publicadosHojePorLoja = contarPorLoja(mencoesPublicadasHoje ?? []);
   const errosPorLoja = contarPorLoja(mencoesComErro ?? []);
 
-  const totalPendentes = (mencoesPendentes ?? []).length;
   const totalPublicadosHoje = (mencoesPublicadasHoje ?? []).length;
-  const maiorValor = Math.max(totalPendentes, totalPublicadosHoje, 1);
-
-  let indiceDeCor = 0;
+  const totalErros = (mencoesComErro ?? []).length;
 
   return (
     <div>
@@ -146,33 +154,11 @@ export default async function LojasDoShoppingPage({
         </div>
       </div>
 
-      <div className="mt-6 flex flex-col gap-3.5 sm:flex-row">
-        <CartaoDeEstatistica
-          rotulo="Aguardando publicar"
-          valor={totalPendentes}
-          icone={
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="9" />
-              <path d="M12 7v5l3 2" />
-            </svg>
-          }
-          corIcone="#fbbf24"
-          corFundoIcone="rgba(251,191,36,0.14)"
-          corBarra="#fbbf24"
-          larguraPercentual={Math.max(4, (totalPendentes / maiorValor) * 100)}
-        />
-        <CartaoDeEstatistica
-          rotulo="Publicados hoje"
+      <div className="mt-6">
+        <CartaoDePublicacoes
           valor={totalPublicadosHoje}
-          icone={
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-              <path d="M20 6L9 17l-5-5" />
-            </svg>
-          }
-          corIcone="#34d399"
-          corFundoIcone="rgba(52,211,153,0.13)"
-          corBarra="#34d399"
-          larguraPercentual={Math.max(4, (totalPublicadosHoje / maiorValor) * 100)}
+          totalErros={totalErros}
+          ultimaPublicacao={ultimaPublicacaoLinha?.publicado_em ?? null}
         />
       </div>
       <p className="mt-3 text-[11px] text-neutral-500">
@@ -185,15 +171,13 @@ export default async function LojasDoShoppingPage({
           const errosDaLoja = errosPorLoja.get(loja.id) ?? 0;
 
           const usaAvatarNeutro = !loja.ativo || loja.eh_geral;
-          const [corInicio, corFim] = usaAvatarNeutro
-            ? ["#2a2c33", "#2a2c33"]
-            : CORES_AVATAR[indiceDeCor++ % CORES_AVATAR.length];
+          const [corInicio, corFim] = usaAvatarNeutro ? ["#2a2c33", "#2a2c33"] : COR_AVATAR;
 
           return (
             <a
               key={loja.id}
               href={`/shoppings/${params.id}/lojas/${loja.id}`}
-              className={`relative flex flex-col rounded-2xl border bg-ink-900 px-5 py-[18px] shadow-[0_16px_36px_-22px_rgba(0,0,0,0.7)] transition hover:-translate-y-0.5 ${
+              className={`relative flex h-[132px] flex-col rounded-2xl border bg-ink-900 px-5 py-[18px] shadow-[0_16px_36px_-22px_rgba(0,0,0,0.7)] transition hover:-translate-y-0.5 ${
                 loja.ativo ? "border-white/12" : "border-danger/25 opacity-70"
               }`}
             >
@@ -239,8 +223,8 @@ export default async function LojasDoShoppingPage({
                 </span>
               </div>
 
-              <div className="mt-3.5 flex flex-wrap items-center gap-1.5">
-                <span className="rounded-full border border-white/12 px-2.5 py-1 text-[11px] font-semibold text-neutral-400">
+              <div className="mt-3.5 flex items-center gap-1.5">
+                <span className="min-w-0 flex-1 truncate rounded-full border border-white/12 px-2.5 py-1 text-[11px] font-semibold text-neutral-400">
                   {loja.instagram_username
                     ? [loja.instagram_username, loja.instagram_username_2]
                         .filter(Boolean)
@@ -248,10 +232,8 @@ export default async function LojasDoShoppingPage({
                         .join(" / ")
                     : "Sem @usuário autorizado"}
                 </span>
-                <span className="rounded-full border border-white/12 px-2.5 py-1 text-[11px] font-semibold text-neutral-400">
-                  {loja.base_conhecimento_texto?.trim()
-                    ? "Com base de conhecimento"
-                    : "Sem base de conhecimento ainda"}
+                <span className="shrink-0 rounded-full border border-white/12 px-2.5 py-1 text-[11px] font-semibold text-neutral-400">
+                  {loja.base_conhecimento_texto?.trim() ? "Com base" : "Sem base"}
                 </span>
               </div>
             </a>
