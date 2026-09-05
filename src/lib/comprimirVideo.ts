@@ -4,7 +4,7 @@ import { promisify } from "node:util";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-import { gerarSeloDeCredito, POSICAO_Y_SELO } from "./creditoNaImagem";
+import { gerarSeloDeCredito, POSICAO_X_SELO, POSICAO_Y_SELO } from "./creditoNaImagem";
 
 const execFileAsync = promisify(execFile);
 
@@ -54,7 +54,7 @@ export async function comprimirVideo(
     // certos mesmo com essa "duração infinita" do selo.
     const filtro = [
       "[0:v]scale='min(1080,iw)':-2[base]",
-      `[base][1:v]overlay=x='(main_w-overlay_w)/2':y='main_h*${POSICAO_Y_SELO}-overlay_h/2'[saida]`,
+      `[base][1:v]overlay=x='main_w*${POSICAO_X_SELO}':y='main_h*${POSICAO_Y_SELO}-overlay_h/2'[saida]`,
     ].join(";");
 
     await execFileAsync(ffmpegPath, [

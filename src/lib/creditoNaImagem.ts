@@ -21,11 +21,12 @@ export function ehImagem(contentType: string): boolean {
 // tela pra qualquer elemento interativo).
 export const POSICAO_Y_TAG_NATIVA = 0.8;
 
-// Fração da altura onde fica o CENTRO do selo queimado (nome/@usuário) — pedido em 06/09/2026 pra
-// ficar logo abaixo do cabeçalho da Story (onde aparece a conta que postou), em vez de perto do
-// rodapé. 0.15 fica logo depois da faixa de ~13% do topo que a Meta recomenda evitar (mesma lógica
-// do rodapé acima, só que espelhada), sem entrar em cima do cabeçalho.
-export const POSICAO_Y_SELO = 0.15;
+// Posição do selo queimado (nome/@usuário) — pedido em 06/09/2026 pra ficar perto do topo (logo
+// abaixo do cabeçalho da Story, onde aparece a conta que postou) e mais pra esquerda, em vez de
+// centralizado. Y é a fração da altura onde fica o CENTRO do selo; X é a fração da largura onde
+// fica a BORDA ESQUERDA dele (não o centro — é uma margem da lateral, não uma posição central).
+export const POSICAO_Y_SELO = 0.1;
+export const POSICAO_X_SELO = 0.03;
 
 // Selo pequeno (formato pílula, cantos arredondados) em vez da faixa preta de ponta a ponta que
 // tinha antes — achada "exagerada" na prática (relatado em 05/09/2026). Mais parecido com o
@@ -102,7 +103,7 @@ export async function adicionarFaixaDeCredito(
   const altura = metadados.height ?? 1920;
 
   const selo = await gerarSeloDeCredito(username, largura);
-  const left = Math.round((largura - selo.largura) / 2);
+  const left = Math.round(largura * POSICAO_X_SELO);
   const top = Math.round(altura * POSICAO_Y_SELO - selo.altura / 2);
 
   const resultado = await imagem
