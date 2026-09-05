@@ -30,7 +30,7 @@ function CartaoDePublicacoes({
   ultimaPublicacao: string | null;
 }) {
   return (
-    <div className="flex-1 rounded-2xl border border-white/8 bg-ink-900 p-5">
+    <div className="flex-1 rounded-2xl border border-ok/30 bg-ink-900 p-5 shadow-[0_0_0_1px_rgba(52,211,153,0.1),0_0_36px_-10px_rgba(52,211,153,0.55)]">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2.5">
           <div
@@ -70,15 +70,20 @@ export default async function LojasDoShoppingPage({
 }) {
   const admin = criarClienteAdmin();
 
-  const { data: lojas } = await admin
+  const { data: lojasEncontradas } = await admin
     .from("shoppinghub_lojas")
     .select(
       "id, nome, eh_geral, ativo, instagram_username, instagram_username_2, base_conhecimento_texto"
     )
-    .eq("shopping_id", params.id)
-    .order("ordem", { ascending: true });
+    .eq("shopping_id", params.id);
 
-  const idsDasLojas = (lojas ?? []).map((l) => l.id);
+  // Ordem alfabética pelo nome (pedido em 06/09/2026) — comparação com `localeCompare` em vez de
+  // deixar o Postgres ordenar, pra tratar acentos (ex.: "Óticas") do jeito esperado em pt-BR.
+  const lojas = [...(lojasEncontradas ?? [])].sort((a, b) =>
+    a.nome.localeCompare(b.nome, "pt-BR", { sensitivity: "base" })
+  );
+
+  const idsDasLojas = lojas.map((l) => l.id);
 
   // Publicação roda a cada poucos minutos, continuamente (ver
   // .github/workflows/publicar-mencoes.yml) — o painel não precisa mais mostrar "aguardando
@@ -166,7 +171,7 @@ export default async function LojasDoShoppingPage({
       </p>
 
       <div className="mt-6 grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
-        {(lojas ?? []).map((loja) => {
+        {lojas.map((loja) => {
           const publicadosHojeDaLoja = publicadosHojePorLoja.get(loja.id) ?? 0;
           const errosDaLoja = errosPorLoja.get(loja.id) ?? 0;
 
@@ -177,8 +182,12 @@ export default async function LojasDoShoppingPage({
             <a
               key={loja.id}
               href={`/shoppings/${params.id}/lojas/${loja.id}`}
-              className={`relative flex h-[132px] flex-col rounded-2xl border bg-ink-900 px-5 py-[18px] shadow-[0_16px_36px_-22px_rgba(0,0,0,0.7)] transition hover:-translate-y-0.5 ${
-                loja.ativo ? "border-white/12" : "border-danger/25 opacity-70"
+              className={`relative flex h-[132px] flex-col rounded-2xl border bg-ink-900 px-5 py-[18px] transition hover:-translate-y-0.5 ${
+                loja.eh_geral
+                  ? "border-sky-400/35 shadow-[0_0_0_1px_rgba(56,165,255,0.1),0_0_32px_-10px_rgba(56,165,255,0.6)]"
+                  : loja.ativo
+                  ? "border-white/12 shadow-[0_16px_36px_-22px_rgba(0,0,0,0.7)]"
+                  : "border-danger/25 opacity-70 shadow-[0_16px_36px_-22px_rgba(0,0,0,0.7)]"
               }`}
             >
               {(publicadosHojeDaLoja > 0 || errosDaLoja > 0) && (
@@ -241,7 +250,7 @@ export default async function LojasDoShoppingPage({
         })}
       </div>
 
-      {(lojas ?? []).length === 0 && (
+      {lojas.length === 0 && (
         <p className="mt-4 rounded-2xl border border-dashed border-white/12 px-4 py-6 text-center text-sm text-neutral-400">
           Nenhuma loja cadastrada ainda.
         </p>
