@@ -104,6 +104,8 @@ export default async function FilaDeMencoesPage({
                 <img
                   src={urlDaMidia}
                   alt=""
+                  loading="lazy"
+                  decoding="async"
                   className="h-12 w-12 shrink-0 rounded-lg object-cover"
                 />
               )}
