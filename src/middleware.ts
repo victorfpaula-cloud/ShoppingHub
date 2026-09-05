@@ -5,10 +5,10 @@ import { NextResponse, type NextRequest } from "next/server";
  * Exige login em todo o painel administrativo (shoppings, lojas, guardrails, fila de menções,
  * relatórios). Ficam de fora: o webhook do Instagram, os endpoints de ponte (api/bridge — chamados
  * por serviços externos tipo o SendPulse, protegidos por segredo compartilhado próprio, não por
- * sessão) e o endpoint de cron (quem chama eles não é um navegador com sessão — a própria Meta, a
- * Vercel, e o SendPulse, respectivamente), e as páginas de Política de Privacidade e Exclusão de
- * Dados (precisam ser públicas — a Meta acessa elas sem login durante o App Review, e qualquer
- * visitante pode precisar delas).
+ * sessão), o endpoint de cron e as ferramentas de manutenção (api/manutencao — protegidas por
+ * segredo próprio na URL, feitas pra abrir direto no navegador sem precisar estar logado), e as
+ * páginas de Política de Privacidade e Exclusão de Dados (precisam ser públicas — a Meta acessa
+ * elas sem login durante o App Review, e qualquer visitante pode precisar delas).
  *
  * Falha "aberta" (deixa passar sem exigir login) só se faltar configurar a variável de ambiente
  * `NEXT_PUBLIC_SUPABASE_ANON_KEY` — evita que um esquecimento de configuração derrube o site
@@ -57,6 +57,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!api/webhook/instagram|api/bridge|api/cron|_next/static|_next/image|favicon.ico|icon.png|apple-icon.png|privacidade|exclusao-de-dados).*)",
+    "/((?!api/webhook/instagram|api/bridge|api/cron|api/manutencao|_next/static|_next/image|favicon.ico|icon.png|apple-icon.png|privacidade|exclusao-de-dados).*)",
   ],
 };

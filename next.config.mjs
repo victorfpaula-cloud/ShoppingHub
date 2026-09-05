@@ -10,6 +10,7 @@ const nextConfig = {
     outputFileTracingIncludes: {
       "/api/webhook/instagram": ["./node_modules/ffmpeg-static/**"],
       "/api/bridge/sendpulse/webhook": ["./node_modules/ffmpeg-static/**"],
+      "/api/manutencao/recomprimir-videos": ["./node_modules/ffmpeg-static/**"],
     },
   },
   async headers() {
