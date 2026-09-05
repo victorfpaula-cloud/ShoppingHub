@@ -3,14 +3,15 @@ import { BUCKET_MENCOES } from "@/lib/mencoes";
 
 export const dynamic = "force-dynamic";
 
-const ROTULO_DO_STATUS: Record<string, { texto: string; classe: string }> = {
-  pendente: { texto: "Pendente", classe: "border-yellow-900 bg-yellow-950 text-yellow-300" },
-  publicado: { texto: "Publicado", classe: "border-green-900 bg-green-950 text-green-300" },
+const ROTULO_DO_STATUS: Record<string, { texto: string; ponto: string; pill: string }> = {
+  pendente: { texto: "Pendente", ponto: "bg-warn", pill: "bg-warn/15 text-warn" },
+  publicado: { texto: "Publicado", ponto: "bg-ok", pill: "bg-ok/15 text-ok" },
   descartado_limite: {
     texto: "Descartado (limite diário)",
-    classe: "border-neutral-700 bg-neutral-900 text-neutral-400",
+    ponto: "bg-neutral-500",
+    pill: "bg-white/8 text-neutral-400",
   },
-  erro: { texto: "Erro", classe: "border-red-900 bg-red-950 text-red-400" },
+  erro: { texto: "Erro", ponto: "bg-danger", pill: "bg-danger/15 text-danger" },
 };
 
 function formatarDataHora(iso: string): string {
@@ -62,33 +63,37 @@ export default async function FilaDeMencoesPage({
 
   return (
     <div>
-      <h2 className="text-lg font-semibold">Fila de menções de Stories</h2>
-      <p className="mt-1 text-sm text-neutral-400">
+      <h1 className="font-display text-[26px] font-bold tracking-tight">Fila de menções de Stories</h1>
+      <p className="mt-2 max-w-2xl text-[13px] text-neutral-400">
         A publicação é automática, a cada poucos minutos — não tem botão de aprovar. Uma menção com
         erro tenta de novo sozinha algumas vezes antes de precisar de ação manual (tentar de novo ou
         excluir).
       </p>
 
       {searchParams.erro && (
-        <div className="mt-4 break-words rounded-lg border border-red-900 bg-red-950 px-4 py-2 text-sm text-red-300">
+        <div className="mt-4 break-words rounded-xl border border-danger/30 bg-danger/10 px-4 py-2.5 text-sm text-danger">
           {searchParams.erro}
         </div>
       )}
 
-      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {(Object.keys(ROTULO_DO_STATUS) as Array<keyof typeof ROTULO_DO_STATUS>).map((status) => (
-          <div key={status} className="rounded-xl border border-neutral-800 bg-neutral-900 p-3">
-            <p className="text-xs text-neutral-400">{ROTULO_DO_STATUS[status].texto}</p>
-            <p className="mt-1 text-xl font-semibold">{contagemPorStatus[status] ?? 0}</p>
+          <div key={status} className="rounded-2xl border border-white/8 bg-ink-900 p-4">
+            <div className="flex items-center gap-2">
+              <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${ROTULO_DO_STATUS[status].ponto}`} />
+              <p className="text-[11px] font-semibold text-neutral-400">{ROTULO_DO_STATUS[status].texto}</p>
+            </div>
+            <p className="font-display mt-2 text-2xl font-bold">{contagemPorStatus[status] ?? 0}</p>
           </div>
         ))}
       </div>
 
-      <div className="mt-6 flex flex-col gap-2">
+      <div className="mt-6 flex flex-col gap-2.5">
         {(mencoes ?? []).map((mencao) => {
           const rotulo = ROTULO_DO_STATUS[mencao.status] ?? {
             texto: mencao.status,
-            classe: "border-neutral-700 bg-neutral-900 text-neutral-400",
+            ponto: "bg-neutral-500",
+            pill: "bg-white/8 text-neutral-400",
           };
 
           const ehVideo = mencao.storage_path?.endsWith(".mp4") ?? false;
@@ -97,10 +102,14 @@ export default async function FilaDeMencoesPage({
             ? admin.storage.from(BUCKET_MENCOES).getPublicUrl(mencao.storage_path).data.publicUrl
             : null;
 
+          const emErro = mencao.status === "erro";
+
           return (
             <div
               key={mencao.id}
-              className="flex items-center gap-3 rounded-xl border border-neutral-800 bg-neutral-900 px-4 py-3"
+              className={`flex items-center gap-3.5 rounded-2xl border px-4 py-3.5 ${
+                emErro ? "border-danger/25 bg-danger/[0.04]" : "border-white/8 bg-ink-900"
+              }`}
             >
               {urlDaMidia && (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -109,7 +118,7 @@ export default async function FilaDeMencoesPage({
                   alt=""
                   loading="lazy"
                   decoding="async"
-                  className="h-12 w-12 shrink-0 rounded-lg object-cover"
+                  className="h-[52px] w-[52px] shrink-0 rounded-xl object-cover"
                 />
               )}
 
@@ -118,7 +127,7 @@ export default async function FilaDeMencoesPage({
                 // iPhone/iPad, principalmente) tocam o vídeo como se fosse um GIF animado dentro
                 // da miniatura. Com várias menções de vídeo na fila ao mesmo tempo, isso trava a
                 // página (relatado em 05/09/2026). Só um ícone fixo, sem baixar o vídeo.
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-neutral-900 text-neutral-500">
+                <div className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-xl bg-ink-850 text-neutral-500">
                   <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
                     <path d="M4 4a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2H4Zm11.5 2.5 3-1.75a.75.75 0 0 1 1.13.65v8.2a.75.75 0 0 1-1.13.65l-3-1.75v-6Z" />
                   </svg>
@@ -127,17 +136,17 @@ export default async function FilaDeMencoesPage({
 
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <p className="text-sm font-medium">
+                  <p className="text-[13.5px] font-bold">
                     {nomePorLoja.get(mencao.loja_id) ?? "Loja removida"}
                   </p>
-                  <span className={`rounded-full border px-2 py-0.5 text-[11px] ${rotulo.classe}`}>
-                    {rotulo.texto}
+                  <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold ${rotulo.pill}`}>
+                    {rotulo.texto.toUpperCase()}
                   </span>
                 </div>
-                <p className="mt-0.5 text-xs text-neutral-500">
+                <p className="mt-0.5 text-[11.5px] text-neutral-500">
                   Recebida em {formatarDataHora(mencao.recebido_em)}
                   {mencao.publicado_em && ` — publicada em ${formatarDataHora(mencao.publicado_em)}`}
-                  {mencao.status === "erro" &&
+                  {emErro &&
                     mencao.tentativas > 0 &&
                     ` — ${mencao.tentativas} tentativa${mencao.tentativas > 1 ? "s" : ""} sozinha${
                       mencao.tentativas > 1 ? "s" : ""
@@ -146,12 +155,12 @@ export default async function FilaDeMencoesPage({
               </div>
 
               <div className="flex shrink-0 items-center gap-2">
-                {mencao.status === "erro" && (
+                {emErro && (
                   <form action={`/api/mencoes/${mencao.id}/tentar-novamente`} method="POST">
                     <input type="hidden" name="shopping_id" value={params.id} />
                     <button
                       type="submit"
-                      className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs font-medium text-neutral-400 hover:border-sky-900 hover:bg-sky-950/40 hover:text-sky-300"
+                      className="rounded-[9px] border border-accent/40 bg-transparent px-3 py-1.5 text-xs font-semibold text-accent-strong hover:bg-accent/10"
                     >
                       Tentar novamente
                     </button>
@@ -162,7 +171,7 @@ export default async function FilaDeMencoesPage({
                   <input type="hidden" name="shopping_id" value={params.id} />
                   <button
                     type="submit"
-                    className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs font-medium text-neutral-500 hover:border-red-900 hover:bg-red-950/40 hover:text-red-400"
+                    className="rounded-[9px] border border-white/12 bg-transparent px-3 py-1.5 text-xs font-semibold text-neutral-400 hover:border-danger/40 hover:bg-danger/10 hover:text-danger"
                   >
                     Excluir
                   </button>
@@ -173,7 +182,7 @@ export default async function FilaDeMencoesPage({
         })}
 
         {(mencoes ?? []).length === 0 && (
-          <p className="rounded-xl border border-dashed border-neutral-700 px-4 py-6 text-center text-sm text-neutral-400">
+          <p className="rounded-2xl border border-dashed border-white/12 px-4 py-6 text-center text-sm text-neutral-400">
             Nenhuma menção de Story recebida ainda.
           </p>
         )}

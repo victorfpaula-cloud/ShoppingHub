@@ -37,38 +37,38 @@ export default async function ContaDoShoppingPage({
 
   return (
     <div>
-      <h2 className="text-lg font-semibold">Conta do Instagram</h2>
-      <p className="mt-1 text-sm text-neutral-400">
+      <h1 className="font-display text-[22px] font-bold tracking-tight">Conta do Instagram</h1>
+      <p className="mt-2 max-w-2xl text-[13px] text-neutral-400">
         Conta conectada que recebe as menções de Story, republica-as e recebe/responde as
         mensagens do Direct desse shopping.
       </p>
 
       {searchParams.conectada && (
-        <div className="mt-4 rounded-lg border border-green-900 bg-green-950 px-4 py-2 text-sm text-green-300">
+        <div className="mt-4 rounded-xl border border-ok/25 bg-ok/10 px-4 py-2.5 text-sm text-ok">
           Conta conectada com sucesso.
         </div>
       )}
 
       {searchParams.excluida && (
-        <div className="mt-4 rounded-lg border border-green-900 bg-green-950 px-4 py-2 text-sm text-green-300">
+        <div className="mt-4 rounded-xl border border-ok/25 bg-ok/10 px-4 py-2.5 text-sm text-ok">
           Conta desconectada.
         </div>
       )}
 
       {mensagemDeErro && (
-        <div className="mt-4 break-words rounded-lg border border-red-900 bg-red-950 px-4 py-2 text-sm text-red-300">
+        <div className="mt-4 break-words rounded-xl border border-danger/30 bg-danger/10 px-4 py-2.5 text-sm text-danger">
           {mensagemDeErro}
         </div>
       )}
 
       {avisoFalhaWebhook && (
-        <div className="mt-4 rounded-lg border border-yellow-900 bg-yellow-950 px-4 py-2 text-sm text-yellow-300">
+        <div className="mt-4 rounded-xl border border-warn/30 bg-warn/10 px-4 py-2.5 text-sm text-warn">
           <p>
             A conta foi conectada, mas não conseguimos inscrever ela pra receber mensagens (o
             Facebook recusou o pedido). Tenta conectar essa mesma conta de novo em instantes.
           </p>
           {searchParams.detalhe && (
-            <p className="mt-2 break-words rounded-md bg-yellow-900/40 px-2 py-1 font-mono text-xs text-yellow-200">
+            <p className="mt-2 break-words rounded-md bg-warn/10 px-2 py-1 font-mono text-xs text-warn">
               Motivo do Facebook: {searchParams.detalhe}
             </p>
           )}
@@ -79,27 +79,25 @@ export default async function ContaDoShoppingPage({
         {(contas ?? []).map((conta) => (
           <div
             key={conta.id}
-            className={`rounded-xl border bg-neutral-800 px-4 py-3 ${
-              conta.active ? "border-neutral-700" : "border-red-950/60"
+            className={`rounded-2xl border bg-ink-900 px-4 py-3.5 ${
+              conta.active ? "border-white/12" : "border-danger/25"
             }`}
           >
             <div className="flex items-center justify-between gap-2">
               <div>
-                <p className="text-sm font-medium">{conta.page_name}</p>
+                <p className="text-[13.5px] font-bold">{conta.page_name}</p>
                 <p className="text-xs text-neutral-500">@{conta.instagram_username}</p>
               </div>
               <span
-                className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${
-                  conta.active
-                    ? "border-green-900 bg-green-950 text-green-300"
-                    : "border-red-900 bg-red-950 text-red-400"
+                className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
+                  conta.active ? "bg-ok/15 text-ok" : "bg-danger/15 text-danger"
                 }`}
               >
-                {conta.active ? "Ativa" : "Pausada"}
+                {conta.active ? "ATIVA" : "PAUSADA"}
               </span>
             </div>
 
-            <div className="mt-3 flex gap-2">
+            <div className="mt-3.5 flex gap-2">
               <form action={`/api/shoppings/${params.id}/conta/status`} method="POST" className="flex-1">
                 <input type="hidden" name="conta_id" value={conta.id} />
                 <input type="hidden" name="ativar" value={conta.active ? "0" : "1"} />
@@ -110,7 +108,7 @@ export default async function ContaDoShoppingPage({
                 <input type="hidden" name="conta_id" value={conta.id} />
                 <button
                   type="submit"
-                  className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs font-medium text-neutral-500 hover:border-red-900 hover:bg-red-950/40 hover:text-red-400"
+                  className="rounded-[9px] border border-white/12 bg-transparent px-3 py-1.5 text-xs font-semibold text-neutral-400 hover:border-danger/40 hover:bg-danger/10 hover:text-danger"
                 >
                   Desconectar
                 </button>
@@ -120,17 +118,21 @@ export default async function ContaDoShoppingPage({
         ))}
 
         {(contas ?? []).length === 0 && (
-          <p className="rounded-xl border border-dashed border-neutral-700 px-4 py-6 text-center text-sm text-neutral-400">
+          <p className="rounded-2xl border border-dashed border-white/12 px-4 py-6 text-center text-sm text-neutral-400">
             Nenhuma conta conectada ainda.
           </p>
         )}
 
         <a
           href={`/api/auth/facebook/start?shopping_id=${params.id}`}
-          className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-neutral-700 p-5 text-neutral-500 transition hover:border-neutral-500 hover:text-neutral-300"
+          className="flex min-h-[100px] flex-col items-center justify-center gap-2 rounded-2xl border-[1.5px] border-dashed border-white/14 p-5 text-neutral-500 transition hover:border-white/25 hover:text-neutral-300"
         >
-          <span className="mb-1 text-2xl leading-none">+</span>
-          <span className="text-sm font-medium">Conectar Instagram</span>
+          <div className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-ink-900 text-neutral-400">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+          </div>
+          <span className="text-[12.5px] font-bold">Conectar Instagram</span>
         </a>
       </div>
     </div>

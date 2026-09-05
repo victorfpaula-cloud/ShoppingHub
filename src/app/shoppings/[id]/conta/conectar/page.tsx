@@ -18,7 +18,7 @@ export default async function ConectarContaPage({
       <div>
         <p className="text-sm text-neutral-400">
           Nenhuma conexão em andamento.{" "}
-          <a href={`/shoppings/${params.id}/conta`} className="text-neutral-200 underline">
+          <a href={`/shoppings/${params.id}/conta`} className="text-accent-strong underline">
             Voltar
           </a>
         </p>
@@ -38,7 +38,7 @@ export default async function ConectarContaPage({
       <div>
         <p className="text-sm text-neutral-400">
           Essa conexão expirou.{" "}
-          <a href={`/shoppings/${params.id}/conta`} className="text-neutral-200 underline">
+          <a href={`/shoppings/${params.id}/conta`} className="text-accent-strong underline">
             Voltar e tentar de novo
           </a>
         </p>
@@ -50,8 +50,8 @@ export default async function ConectarContaPage({
 
   return (
     <div>
-      <h2 className="text-lg font-semibold">Qual conta você quer conectar?</h2>
-      <p className="mt-1 text-sm text-neutral-400">
+      <h1 className="font-display text-[22px] font-bold tracking-tight">Qual conta você quer conectar?</h1>
+      <p className="mt-2 text-[13px] text-neutral-400">
         Encontramos {paginas.length} Página(s) do Facebook com Instagram vinculado.
       </p>
 

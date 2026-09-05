@@ -22,7 +22,7 @@ export function BotaoPausar({ ativo }: { ativo: boolean }) {
           }
         }
       }}
-      className="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs font-medium text-neutral-300 hover:bg-neutral-950"
+      className="w-full rounded-[9px] border border-white/14 px-3 py-1.5 text-xs font-semibold text-neutral-300 hover:bg-white/5"
     >
       {ativo ? "Pausar" : "Reativar"}
     </button>

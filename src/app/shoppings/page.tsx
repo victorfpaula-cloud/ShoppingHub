@@ -1,4 +1,5 @@
 import { criarClienteAdmin } from "@/lib/supabase/admin";
+import { iniciaisDoNome } from "@/lib/iniciais";
 import { BotaoSair } from "./BotaoSair";
 
 export const dynamic = "force-dynamic";
@@ -30,85 +31,119 @@ export default async function ShoppingsPage({
   }
 
   return (
-    <main className="mx-auto max-w-4xl px-6 py-10">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">Shoppings</h1>
-          <p className="mt-1 text-sm text-neutral-400">
-            Atendimento virtual — cada shopping tem suas próprias lojas e base de conhecimento.
-          </p>
+    <div>
+      <div className="flex items-center justify-between border-b border-white/8 px-6 py-4 lg:px-12">
+        <div className="flex items-center gap-2.5">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo-shoppinghub.png" alt="" className="h-7 w-7 object-contain" />
+          <span className="font-display text-[15px] font-bold tracking-tight">ShoppingHub</span>
         </div>
-
         <BotaoSair />
       </div>
 
-      <a
-        href="/relatorios"
-        className="mt-6 flex items-center justify-between gap-3 rounded-2xl border border-neutral-700 bg-neutral-800 px-5 py-4 shadow-lg shadow-black/30 transition hover:-translate-y-0.5 hover:shadow-xl"
-      >
-        <div>
-          <p className="font-medium text-neutral-100">Relatório de atendimentos</p>
-          <p className="mt-0.5 text-xs text-neutral-400">
-            Filtra por shopping e mês, e exporta em PDF
-          </p>
-        </div>
-        <span className="shrink-0 text-neutral-500">&rarr;</span>
-      </a>
-
-      {searchParams.criado && (
-        <div className="mt-4 rounded-lg border border-green-900 bg-green-950 px-4 py-2 text-sm text-green-300">
-          Shopping criado, com a loja "Geral" já cadastrada.
-        </div>
-      )}
-
-      {searchParams.erro && (
-        <div className="mt-4 break-words rounded-lg border border-red-900 bg-red-950 px-4 py-2 text-sm text-red-300">
-          {searchParams.erro}
-        </div>
-      )}
-
-      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {(shoppings ?? []).map((shopping) => (
-          <a
-            key={shopping.id}
-            href={`/shoppings/${shopping.id}`}
-            className={`group flex flex-col rounded-2xl border bg-neutral-800 p-5 shadow-lg shadow-black/30 transition-all hover:-translate-y-0.5 hover:shadow-xl ${
-              shopping.ativo ? "border-neutral-700" : "border-red-950/60"
-            }`}
-          >
-            <span
-              className={`w-fit rounded-full border px-2.5 py-1 text-[11px] font-medium ${
-                shopping.ativo
-                  ? "border-green-900 bg-green-950 text-green-300"
-                  : "border-red-900 bg-red-950 text-red-400"
-              }`}
-            >
-              {shopping.ativo ? "Ativo" : "Inativo"}
-            </span>
-
-            <p className="mt-4 line-clamp-2 min-h-[2.5rem] font-medium leading-tight text-neutral-100">
-              {shopping.nome}
-            </p>
-            <p className="text-sm text-neutral-500">/{shopping.slug}</p>
-
-            <p className="mt-3 text-xs text-neutral-400">
-              {contagemLojasPorShopping.get(shopping.id) ?? 0} loja(s) cadastrada(s)
-            </p>
-          </a>
-        ))}
+      <main className="mx-auto max-w-4xl px-6 py-9">
+        <h1 className="font-display text-[28px] font-bold tracking-tight">Shoppings</h1>
+        <p className="mt-2 text-[13.5px] text-neutral-400">
+          Atendimento virtual — cada shopping tem suas próprias lojas e base de conhecimento.
+        </p>
 
         <a
-          href="/shoppings/nova"
-          className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-neutral-700 p-5 text-neutral-500 transition hover:border-neutral-500 hover:text-neutral-300"
+          href="/relatorios"
+          className="mt-6 flex items-center justify-between gap-3 rounded-2xl border border-white/8 bg-gradient-to-b from-ink-900 to-ink-850 px-6 py-5 transition hover:-translate-y-0.5"
         >
-          <span className="mb-1 text-2xl leading-none">+</span>
-          <span className="text-sm font-medium">Novo shopping</span>
+          <div className="flex items-center gap-3.5">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[11px] bg-accent/15 text-accent-strong">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 20V10M12 20V4M20 20v-7" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-[14px] font-bold text-neutral-100">Relatório de atendimentos</p>
+              <p className="mt-0.5 text-xs text-neutral-400">Filtra por shopping e mês, e exporta em PDF</p>
+            </div>
+          </div>
+          <span className="shrink-0 text-neutral-600">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 18l6-6-6-6" />
+            </svg>
+          </span>
         </a>
-      </div>
 
-      {(shoppings ?? []).length === 0 && (
-        <p className="mt-2 text-sm text-neutral-500">Nenhum shopping cadastrado ainda.</p>
-      )}
-    </main>
+        {searchParams.criado && (
+          <div className="mt-4 rounded-xl border border-ok/25 bg-ok/10 px-4 py-2.5 text-sm text-ok">
+            Shopping criado, com a loja &quot;Geral&quot; já cadastrada.
+          </div>
+        )}
+
+        {searchParams.erro && (
+          <div className="mt-4 break-words rounded-xl border border-danger/30 bg-danger/10 px-4 py-2.5 text-sm text-danger">
+            {searchParams.erro}
+          </div>
+        )}
+
+        <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {(shoppings ?? []).map((shopping, indice) => (
+            <a
+              key={shopping.id}
+              href={`/shoppings/${shopping.id}`}
+              className={`flex flex-col rounded-2xl border bg-ink-900 p-5 shadow-[0_20px_44px_-22px_rgba(0,0,0,0.7)] transition hover:-translate-y-0.5 ${
+                shopping.ativo ? "border-white/12" : "border-danger/25"
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <div
+                  className="font-display flex h-11 w-11 items-center justify-center rounded-xl text-[17px] font-bold text-white"
+                  style={{
+                    background:
+                      indice % 2 === 0
+                        ? "linear-gradient(155deg, #8f82ff, #6a5bde)"
+                        : "linear-gradient(155deg, #5fd0c0, #2f9a8d)",
+                  }}
+                >
+                  {iniciaisDoNome(shopping.nome)}
+                </div>
+                <span
+                  className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${
+                    shopping.ativo ? "bg-ok/15 text-ok" : "bg-danger/15 text-danger"
+                  }`}
+                >
+                  {shopping.ativo ? "ATIVO" : "INATIVO"}
+                </span>
+              </div>
+
+              <p className="mt-4 line-clamp-2 min-h-[2.5rem] text-[16px] font-bold leading-tight">
+                {shopping.nome}
+              </p>
+              <p className="text-[12px] text-neutral-500">/{shopping.slug}</p>
+
+              <div className="mt-4 border-t border-white/8 pt-3.5">
+                <span className="font-display text-[19px] font-bold">
+                  {contagemLojasPorShopping.get(shopping.id) ?? 0}
+                </span>
+                <span className="ml-1.5 text-[11px] font-semibold text-neutral-500">
+                  loja(s) cadastrada(s)
+                </span>
+              </div>
+            </a>
+          ))}
+
+          <a
+            href="/shoppings/nova"
+            className="flex min-h-[172px] flex-col items-center justify-center gap-2.5 rounded-2xl border-[1.5px] border-dashed border-white/14 p-5 text-neutral-500 transition hover:border-white/25 hover:text-neutral-300"
+          >
+            <div className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-ink-900 text-neutral-400">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+            </div>
+            <span className="text-[12.5px] font-bold">Novo shopping</span>
+          </a>
+        </div>
+
+        {(shoppings ?? []).length === 0 && (
+          <p className="mt-2 text-sm text-neutral-500">Nenhum shopping cadastrado ainda.</p>
+        )}
+      </main>
+    </div>
   );
 }

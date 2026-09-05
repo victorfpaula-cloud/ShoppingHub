@@ -93,45 +93,45 @@ export default async function AtendimentosPage({ params }: { params: { id: strin
 
   return (
     <div>
-      <h2 className="text-lg font-semibold">Atendimentos</h2>
-      <p className="mt-1 text-sm text-neutral-400">
+      <h1 className="font-display text-[22px] font-bold tracking-tight">Atendimentos</h1>
+      <p className="mt-2 max-w-2xl text-[13px] text-neutral-400">
         Um card por cliente atendido pela IA — clica pra expandir e ver a conversa inteira. O
         histórico de mensagens fica guardado por {diasDeRetencaoDeMensagens()} dias e depois é
         apagado automaticamente.
       </p>
 
-      <div className="mt-6 flex flex-col gap-3">
+      <div className="mt-6 flex flex-col gap-2.5">
         {atendimentos.map((atendimento) => (
           <details
             key={atendimento.instagramScopedId}
-            className="rounded-xl border border-neutral-800 bg-neutral-900"
+            className="rounded-2xl border border-white/8 bg-ink-900"
           >
-            <summary className="flex cursor-pointer flex-wrap items-center justify-between gap-2 px-4 py-3">
+            <summary className="flex cursor-pointer flex-wrap items-center justify-between gap-2 px-4 py-3.5">
               <div className="min-w-0">
-                <p className="text-sm font-medium text-neutral-100">
+                <p className="text-[13.5px] font-bold text-neutral-100">
                   {atendimento.clienteNome}
                   {atendimento.clienteUsername && (
                     <span className="text-neutral-500"> @{atendimento.clienteUsername}</span>
                   )}
                 </p>
-                <p className="mt-0.5 text-xs text-neutral-500">
+                <p className="mt-0.5 text-[11.5px] text-neutral-500">
                   Último contato em {formatarDataHora(atendimento.ultimaMensagemEm)}
                 </p>
               </div>
-              <span className="shrink-0 rounded-full border border-neutral-700 bg-neutral-800 px-2 py-0.5 text-[11px] text-neutral-300">
+              <span className="shrink-0 rounded-full bg-white/8 px-2.5 py-1 text-[10.5px] font-semibold text-neutral-300">
                 {atendimento.totalMensagens} mensagem{atendimento.totalMensagens === 1 ? "" : "ns"}
               </span>
             </summary>
 
-            <ul className="divide-y divide-neutral-800 border-t border-neutral-800">
+            <ul className="divide-y divide-white/8 border-t border-white/8">
               {atendimento.mensagens.map((m, indice) => (
-                <li key={indice} className="flex flex-col gap-0.5 px-4 py-2 text-xs">
+                <li key={indice} className="flex flex-col gap-0.5 px-4 py-2.5 text-xs">
                   <div className="flex flex-wrap items-baseline justify-between gap-x-3">
                     <span
                       className={
                         m.direcao === "recebida"
-                          ? "font-medium text-neutral-300"
-                          : "font-medium text-sky-400"
+                          ? "font-semibold text-neutral-300"
+                          : "font-semibold text-accent-strong"
                       }
                     >
                       {m.direcao === "recebida" ? "Cliente" : "Atendimento"}
@@ -147,7 +147,7 @@ export default async function AtendimentosPage({ params }: { params: { id: strin
         ))}
 
         {atendimentos.length === 0 && (
-          <p className="rounded-xl border border-dashed border-neutral-700 px-4 py-6 text-center text-sm text-neutral-400">
+          <p className="rounded-2xl border border-dashed border-white/12 px-4 py-6 text-center text-sm text-neutral-400">
             Nenhum atendimento registrado ainda.
           </p>
         )}

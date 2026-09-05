@@ -1,4 +1,5 @@
 import { criarClienteAdmin } from "@/lib/supabase/admin";
+import { CampoDeTexto } from "@/components/CampoDeTexto";
 
 export const dynamic = "force-dynamic";
 
@@ -33,194 +34,164 @@ export default async function EditarLojaPage({
 
   return (
     <div>
-      <a href={`/shoppings/${params.id}`} className="text-sm text-neutral-400 hover:text-neutral-300">
-        &larr; Voltar pras lojas
-      </a>
-
-      <div className="mt-4 flex items-center gap-2">
-        <h2 className="text-lg font-semibold">{loja.nome}</h2>
-        {loja.eh_geral && (
-          <span className="rounded-full border border-sky-900 bg-sky-950 px-2 py-0.5 text-[10px] font-medium text-sky-300">
-            Fallback
-          </span>
-        )}
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="font-display flex min-w-0 items-center gap-2.5 text-[22px] font-bold tracking-tight">
+          <span className="truncate">{loja.nome}</span>
+          {loja.eh_geral && (
+            <span className="shrink-0 rounded-full bg-accent/15 px-2.5 py-1 text-[10px] font-bold text-accent-strong">
+              FALLBACK
+            </span>
+          )}
+        </h1>
+        <button
+          type="submit"
+          form="form-editar-loja"
+          className="shrink-0 rounded-[10px] bg-accent px-4 py-2 text-[12.5px] font-bold text-white shadow-[0_8px_20px_-8px_rgba(124,110,242,0.55)] transition hover:bg-accent-strong"
+        >
+          Salvar loja
+        </button>
       </div>
 
       {searchParams.salvo && (
-        <div className="mt-4 rounded-lg border border-green-900 bg-green-950 px-4 py-2 text-sm text-green-300">
+        <div className="mt-4 rounded-xl border border-ok/25 bg-ok/10 px-4 py-2.5 text-sm text-ok">
           Loja salva.
         </div>
       )}
 
       {searchParams.erro && (
-        <div className="mt-4 break-words rounded-lg border border-red-900 bg-red-950 px-4 py-2 text-sm text-red-300">
+        <div className="mt-4 break-words rounded-xl border border-danger/30 bg-danger/10 px-4 py-2.5 text-sm text-danger">
           {searchParams.erro}
         </div>
       )}
 
-      <form action={`/api/lojas/${loja.id}`} method="POST" className="mt-4 flex flex-col gap-4">
+      <form
+        id="form-editar-loja"
+        action={`/api/lojas/${loja.id}`}
+        method="POST"
+        className="mt-6 flex flex-col gap-4"
+      >
         <input type="hidden" name="shopping_id" value={params.id} />
 
-        <div>
-          <label className="text-xs text-neutral-400">Nome da loja</label>
-          <input
-            type="text"
-            name="nome"
-            required
-            defaultValue={loja.nome}
-            className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm"
-          />
+        <div className="rounded-2xl border border-white/8 bg-ink-900 p-5 sm:p-6">
+          <h3 className="text-[14.5px] font-bold">Dados básicos</h3>
+          <div className="mt-4 grid grid-cols-1 items-end gap-4 sm:grid-cols-[2fr_1fr]">
+            <CampoDeTexto label="Nome da loja" type="text" name="nome" required defaultValue={loja.nome} />
+            <label className="flex h-[42px] cursor-pointer items-center justify-between rounded-[10px] border border-white/14 bg-ink-850 px-3.5">
+              <span className="text-[13px] font-semibold text-neutral-300">Loja ativa</span>
+              <span className="relative inline-flex items-center">
+                <input
+                  type="checkbox"
+                  name="ativo"
+                  value="1"
+                  defaultChecked={loja.ativo}
+                  className="peer sr-only"
+                />
+                <span className="block h-[23px] w-10 rounded-full bg-white/15 transition-colors peer-checked:bg-accent" />
+                <span className="absolute left-[3px] h-[17px] w-[17px] rounded-full bg-white transition-transform peer-checked:translate-x-[17px]" />
+              </span>
+            </label>
+          </div>
+          <p className="mt-3 text-[11.5px] text-neutral-500">Loja ativa aparece pra triagem escolher.</p>
         </div>
 
-        <label className="flex items-center gap-2 text-sm text-neutral-300">
-          <input type="checkbox" name="ativo" value="1" defaultChecked={loja.ativo} />
-          Loja ativa (aparece pra triagem escolher)
-        </label>
-
         {!loja.eh_geral && (
-          <div className="rounded-xl border border-neutral-800 bg-neutral-950 p-4">
-            <h3 className="text-sm font-semibold text-neutral-200">Marcação de Stories</h3>
-            <p className="mt-1 text-xs text-neutral-500">
+          <div className="rounded-2xl border border-white/8 bg-ink-900 p-5 sm:p-6">
+            <h3 className="text-[14.5px] font-bold">Marcação de Stories</h3>
+            <p className="mt-2 text-[12px] leading-relaxed text-neutral-500">
               @usuário autorizado a marcar o shopping nos Stories dele — só menções desses
               @usuários entram na fila de republicação. Dá pra cadastrar até dois; deixe o segundo
               em branco pra não autorizar mais ninguém além do primeiro.
             </p>
 
-            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div>
-                <label className="text-xs text-neutral-400">@usuário do Instagram</label>
-                <input
-                  type="text"
-                  name="instagram_username"
-                  placeholder="Ex: loja_exemplo"
-                  defaultValue={loja.instagram_username ?? ""}
-                  className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-neutral-400">2º @usuário do Instagram (opcional)</label>
-                <input
-                  type="text"
-                  name="instagram_username_2"
-                  placeholder="Ex: outra_conta"
-                  defaultValue={loja.instagram_username_2 ?? ""}
-                  className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-neutral-400">Limite diário de menções</label>
-                <input
-                  type="number"
-                  name="limite_diario_mencoes"
-                  min={0}
-                  defaultValue={loja.limite_diario_mencoes}
-                  className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm"
-                />
-              </div>
+            <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <CampoDeTexto
+                label="@usuário do Instagram"
+                type="text"
+                name="instagram_username"
+                placeholder="Ex: loja_exemplo"
+                defaultValue={loja.instagram_username ?? ""}
+              />
+              <CampoDeTexto
+                label="2º @usuário (opcional)"
+                type="text"
+                name="instagram_username_2"
+                placeholder="Ex: outra_conta"
+                defaultValue={loja.instagram_username_2 ?? ""}
+              />
+              <CampoDeTexto
+                label="Limite diário de menções"
+                type="number"
+                name="limite_diario_mencoes"
+                min={0}
+                defaultValue={loja.limite_diario_mencoes}
+              />
             </div>
           </div>
         )}
 
-        <div className="rounded-xl border border-neutral-800 bg-neutral-950 p-4">
-          <h3 className="text-sm font-semibold text-neutral-200">Contato (opcional)</h3>
+        <div className="rounded-2xl border border-white/8 bg-ink-900 p-5 sm:p-6">
+          <h3 className="text-[14.5px] font-bold">Contato (opcional)</h3>
 
-          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div>
-              <label className="text-xs text-neutral-400">Endereço</label>
-              <input
-                type="text"
-                name="endereco"
-                defaultValue={loja.endereco ?? ""}
-                className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-neutral-400">Telefone</label>
-              <input
-                type="text"
-                name="telefone"
-                defaultValue={loja.telefone ?? ""}
-                className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-neutral-400">E-mail</label>
-              <input
-                type="email"
-                name="email"
-                defaultValue={loja.email ?? ""}
-                className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-neutral-400">Horário de atendimento</label>
-              <input
-                type="text"
-                name="horario_atendimento"
-                placeholder="Ex: seg a sáb, 10h às 22h"
-                defaultValue={loja.horario_atendimento ?? ""}
-                className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm"
-              />
-            </div>
+          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <CampoDeTexto label="Endereço" type="text" name="endereco" defaultValue={loja.endereco ?? ""} />
+            <CampoDeTexto label="Telefone" type="text" name="telefone" defaultValue={loja.telefone ?? ""} />
+            <CampoDeTexto label="E-mail" type="email" name="email" defaultValue={loja.email ?? ""} />
+            <CampoDeTexto
+              label="Horário de atendimento"
+              type="text"
+              name="horario_atendimento"
+              placeholder="Ex: seg a sáb, 10h às 22h"
+              defaultValue={loja.horario_atendimento ?? ""}
+            />
             <div className="sm:col-span-2">
-              <label className="text-xs text-neutral-400">Responsável</label>
-              <input
+              <CampoDeTexto
+                label="Responsável"
                 type="text"
                 name="responsavel"
                 defaultValue={loja.responsavel ?? ""}
-                className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm"
               />
             </div>
           </div>
         </div>
 
-        <div>
-          <label className="text-xs text-neutral-400">
-            Base de conhecimento (texto que o Gemini usa pra responder sobre essa loja — ideal
-            incluir uma lista de produtos e preços, já que pergunta de preço não perdoa informação
-            desatualizada)
-          </label>
+        <div className="rounded-2xl border border-white/8 bg-ink-900 p-5 sm:p-6">
+          <h3 className="text-[14.5px] font-bold">Base de conhecimento</h3>
+          <p className="mt-2 text-[12px] leading-relaxed text-neutral-500">
+            Texto que o Gemini usa pra responder sobre essa loja — ideal incluir uma lista de
+            produtos e preços, já que pergunta de preço não perdoa informação desatualizada.
+          </p>
           <textarea
             name="base_conhecimento_texto"
             rows={12}
             defaultValue={loja.base_conhecimento_texto}
             placeholder="Cola aqui tudo que essa loja precisa saber pra responder bem"
-            className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm"
+            className="mt-3 w-full rounded-[10px] border border-white/14 bg-ink-850 px-3.5 py-3 text-[13.5px] leading-relaxed text-neutral-100 outline-none focus:border-accent focus:ring-[3px] focus:ring-accent/20"
           />
-          <p className="mt-1 text-xs text-neutral-500">
+          <p className="mt-2 text-[11.5px] text-neutral-500">
             Upload de PDF/Word chega numa próxima etapa — por enquanto, é só colar o texto aqui.
           </p>
         </div>
-
-        <button
-          type="submit"
-          className="mt-2 rounded-xl border border-neutral-700 px-4 py-2 text-sm font-medium text-neutral-200 hover:border-neutral-500"
-        >
-          Salvar loja
-        </button>
       </form>
 
-      {!loja.eh_geral ? (
-        <form
-          action={`/api/lojas/${loja.id}/excluir`}
-          method="POST"
-          className="mt-6 border-t border-neutral-800 pt-4"
-        >
-          <input type="hidden" name="shopping_id" value={params.id} />
-          <button
-            type="submit"
-            className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs font-medium text-neutral-500 hover:border-red-900 hover:bg-red-950/40 hover:text-red-400"
-          >
-            Excluir loja
-          </button>
-        </form>
-      ) : (
-        <p className="mt-6 border-t border-neutral-800 pt-4 text-xs text-neutral-500">
-          Essa é a loja "Geral" (fallback) — não pode ser excluída. Dá pra desativar (mas não é
-          recomendado, já que é o destino padrão de qualquer assunto que não bata com nenhuma
-          outra loja).
-        </p>
-      )}
+      <div className="mt-6 border-t border-white/8 pt-5">
+        {!loja.eh_geral ? (
+          <form action={`/api/lojas/${loja.id}/excluir`} method="POST">
+            <input type="hidden" name="shopping_id" value={params.id} />
+            <button
+              type="submit"
+              className="rounded-[9px] border border-white/12 bg-transparent px-3.5 py-1.5 text-xs font-semibold text-neutral-400 hover:border-danger/40 hover:bg-danger/10 hover:text-danger"
+            >
+              Excluir loja
+            </button>
+          </form>
+        ) : (
+          <p className="text-xs leading-relaxed text-neutral-500">
+            Essa é a loja &quot;Geral&quot; (fallback) — não pode ser excluída. Dá pra desativar (mas não é
+            recomendado, já que é o destino padrão de qualquer assunto que não bata com nenhuma
+            outra loja).
+          </p>
+        )}
+      </div>
     </div>
   );
 }

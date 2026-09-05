@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Manrope, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -6,11 +7,27 @@ export const metadata: Metadata = {
   description: "Atendimento virtual de shopping centers via Instagram Direct",
 };
 
+// Fontes do redesign (aprovado em 05/09/2026): Space Grotesk pros títulos/números (classe
+// font-display, ver tailwind.config.ts), Manrope pro corpo (fonte padrão). Carregadas via
+// next/font — o próprio Next baixa e hospeda os arquivos no build (self-hosted), então não tem
+// nenhuma chamada externa pro Google Fonts em produção nem risco de atraso de carregamento por
+// causa disso.
+const fonteDisplay = Space_Grotesk({
+  subsets: ["latin"],
+  weight: ["500", "600", "700"],
+  variable: "--font-display",
+});
+const fonteCorpo = Manrope({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800"],
+  variable: "--font-body",
+});
+
 // Cor de fundo repetida como estilo INLINE (não só como classe do Tailwind) tanto no <html>
 // quanto no <body> — inline aplica na hora, antes até da folha de estilo terminar de carregar.
 // Sem isso, sobrava um instante de tela branca entre abrir o app e a splash aparecer, porque o
 // navegador pinta a página em branco por padrão até o CSS externo chegar.
-const CorDeFundo = "#171717"; // mesmo tom do bg-neutral-900 do Tailwind
+const CorDeFundo = "#07080a"; // mesmo tom do bg-ink-950 do Tailwind (ver tailwind.config.ts)
 
 export default function RootLayout({
   children,
@@ -18,7 +35,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="pt-BR" style={{ backgroundColor: CorDeFundo }}>
+    <html
+      lang="pt-BR"
+      className={`${fonteDisplay.variable} ${fonteCorpo.variable}`}
+      style={{ backgroundColor: CorDeFundo }}
+    >
       <head>
         <meta name="theme-color" content={CorDeFundo} />
         {/*
@@ -34,7 +55,7 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-title" content="ShoppingHub" />
       </head>
       <body
-        className="bg-neutral-900 text-neutral-100 antialiased"
+        className="bg-ink-950 font-sans text-neutral-100 antialiased"
         style={{ backgroundColor: CorDeFundo }}
       >
         {/*
@@ -45,10 +66,10 @@ export default function RootLayout({
         */}
         <div
           id="sh-splash"
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-neutral-950 opacity-100 transition-opacity duration-500"
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-ink-950 opacity-100 transition-opacity duration-500"
         >
           <div className="relative flex h-32 w-32 items-center justify-center">
-            <div className="absolute inset-0 animate-spin rounded-full border-4 border-neutral-800 border-t-neutral-300" />
+            <div className="absolute inset-0 animate-spin rounded-full border-4 border-ink-900 border-t-accent" />
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/logo-shoppinghub.png"

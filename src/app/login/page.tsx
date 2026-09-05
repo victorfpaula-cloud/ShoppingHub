@@ -30,47 +30,74 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center px-6">
-      <h1 className="text-xl font-semibold">ShoppingHub</h1>
-      <p className="mt-1 text-sm text-neutral-400">Painel administrativo — acesso restrito.</p>
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden px-6">
+      <div
+        className="pointer-events-none absolute -top-64 left-1/2 h-[640px] w-[900px] -translate-x-1/2 rounded-full opacity-60"
+        style={{ background: "radial-gradient(closest-side, rgba(124,110,242,0.16), transparent 72%)" }}
+      />
 
-      {erro && (
-        <div className="mt-4 rounded-lg border border-red-900 bg-red-950 px-4 py-2 text-sm text-red-300">
-          {erro}
+      <div className="relative flex w-full max-w-sm flex-col items-center">
+        <div className="w-full rounded-[20px] border border-white/8 bg-ink-900 px-9 py-10 shadow-[0_24px_60px_-18px_rgba(0,0,0,0.75)]">
+          <div className="flex flex-col items-center gap-3.5">
+            <div className="relative flex h-14 w-14 items-center justify-center">
+              <div
+                className="absolute -inset-2.5 rounded-full opacity-50"
+                style={{ background: "radial-gradient(closest-side, rgba(124,110,242,0.45), transparent 70%)" }}
+              />
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo-shoppinghub.png" alt="" className="relative h-14 w-14 object-contain" />
+            </div>
+            <div className="text-center">
+              <div className="font-display text-[19px] font-bold tracking-tight">ShoppingHub</div>
+              <p className="mt-1 text-[12.5px] text-neutral-400">
+                Painel administrativo &mdash; acesso restrito
+              </p>
+            </div>
+          </div>
+
+          {erro && (
+            <div className="mt-6 rounded-xl border border-danger/30 bg-danger/10 px-4 py-2.5 text-sm text-danger">
+              {erro}
+            </div>
+          )}
+
+          <form onSubmit={entrar} className="mt-7 flex flex-col gap-4">
+            <div>
+              <label className="text-xs font-semibold text-neutral-400">E-mail</label>
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(evento) => setEmail(evento.target.value)}
+                className="mt-1.5 h-[42px] w-full rounded-[11px] border border-white/14 bg-ink-850 px-3.5 text-[13.5px] font-medium text-neutral-100 outline-none focus:border-accent focus:ring-[3px] focus:ring-accent/20"
+              />
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-neutral-400">Senha</label>
+              <input
+                type="password"
+                required
+                value={senha}
+                onChange={(evento) => setSenha(evento.target.value)}
+                className="mt-1.5 h-[42px] w-full rounded-[11px] border border-white/14 bg-ink-850 px-3.5 text-[13.5px] font-medium text-neutral-100 outline-none focus:border-accent focus:ring-[3px] focus:ring-accent/20"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={enviando}
+              className="mt-1.5 h-11 rounded-[11px] bg-accent text-[13.5px] font-bold text-white shadow-[0_8px_24px_-6px_rgba(124,110,242,0.45)] transition hover:bg-accent-strong disabled:opacity-60"
+            >
+              {enviando ? "Entrando…" : "Entrar"}
+            </button>
+          </form>
         </div>
-      )}
 
-      <form onSubmit={entrar} className="mt-6 flex flex-col gap-4">
-        <div>
-          <label className="text-xs text-neutral-400">E-mail</label>
-          <input
-            type="email"
-            required
-            value={email}
-            onChange={(evento) => setEmail(evento.target.value)}
-            className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm"
-          />
-        </div>
-
-        <div>
-          <label className="text-xs text-neutral-400">Senha</label>
-          <input
-            type="password"
-            required
-            value={senha}
-            onChange={(evento) => setSenha(evento.target.value)}
-            className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm"
-          />
-        </div>
-
-        <button
-          type="submit"
-          disabled={enviando}
-          className="mt-2 rounded-xl bg-neutral-100 px-4 py-3 text-sm font-medium text-neutral-950 disabled:opacity-60"
-        >
-          {enviando ? "Entrando…" : "Entrar"}
-        </button>
-      </form>
+        <p className="mt-5 text-[11px] tracking-wide text-neutral-600">
+          ShoppingHub &middot; construído sob medida para shoppings
+        </p>
+      </div>
     </main>
   );
 }

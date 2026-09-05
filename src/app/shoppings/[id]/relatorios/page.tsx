@@ -6,13 +6,13 @@ export const dynamic = "force-dynamic";
 const DIAS_NO_DETALHAMENTO = 30;
 
 const ROTULO_DO_STATUS: Record<string, { texto: string; classe: string }> = {
-  pendente: { texto: "Pendente", classe: "border-yellow-900 bg-yellow-950 text-yellow-300" },
-  publicado: { texto: "Publicado", classe: "border-green-900 bg-green-950 text-green-300" },
+  pendente: { texto: "Pendente", classe: "bg-warn/15 text-warn" },
+  publicado: { texto: "Publicado", classe: "bg-ok/15 text-ok" },
   descartado_limite: {
     texto: "Limite diário",
-    classe: "border-neutral-700 bg-neutral-900 text-neutral-400",
+    classe: "bg-white/8 text-neutral-400",
   },
-  erro: { texto: "Erro", classe: "border-red-900 bg-red-950 text-red-400" },
+  erro: { texto: "Erro", classe: "bg-danger/15 text-danger" },
 };
 
 function formatarHora(iso: string): string {
@@ -131,42 +131,42 @@ export default async function RelatoriosDeMencoesPage({ params }: { params: { id
 
   return (
     <div>
-      <h2 className="text-lg font-semibold">Relatórios de Menções</h2>
-      <p className="mt-1 text-sm text-neutral-400">
+      <h1 className="font-display text-[22px] font-bold tracking-tight">Relatórios de Menções</h1>
+      <p className="mt-2 max-w-2xl text-[13px] text-neutral-400">
         Visão geral de todas as menções de Story recebidas e republicadas, por loja e por dia.
       </p>
 
       {/* Resumo geral */}
-      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {(Object.keys(ROTULO_DO_STATUS) as Array<keyof typeof ROTULO_DO_STATUS>).map((status) => (
-          <div key={status} className="rounded-xl border border-neutral-800 bg-neutral-900 p-3">
-            <p className="text-xs text-neutral-400">{ROTULO_DO_STATUS[status].texto}</p>
-            <p className="mt-1 text-xl font-semibold">{totalPorStatus[status] ?? 0}</p>
+          <div key={status} className="rounded-2xl border border-white/8 bg-ink-900 p-4">
+            <p className="text-[11px] font-semibold text-neutral-400">{ROTULO_DO_STATUS[status].texto}</p>
+            <p className="font-display mt-2 text-2xl font-bold">{totalPorStatus[status] ?? 0}</p>
           </div>
         ))}
       </div>
 
       {/* Ranking por loja */}
-      <div className="mt-8">
-        <h3 className="text-sm font-semibold text-neutral-200">Publicações por loja (histórico completo)</h3>
-        <div className="mt-3 flex flex-col gap-2">
+      <div className="mt-9">
+        <h3 className="text-[13.5px] font-bold text-neutral-200">Publicações por loja (histórico completo)</h3>
+        <div className="mt-3.5 flex flex-col gap-2.5">
           {ranking.map((linha) => (
             <div key={linha.lojaId} className="flex items-center gap-3">
-              <span className="w-32 shrink-0 truncate text-sm text-neutral-300">{linha.nome}</span>
-              <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-neutral-800">
+              <span className="w-32 shrink-0 truncate text-[13px] font-medium text-neutral-300">{linha.nome}</span>
+              <div className="h-2 flex-1 overflow-hidden rounded-full bg-ink-850">
                 <div
-                  className="h-full rounded-full bg-sky-600"
+                  className="h-full rounded-full bg-accent"
                   style={{ width: `${Math.max(4, (linha.total / maiorTotalDoRanking) * 100)}%` }}
                 />
               </div>
-              <span className="w-6 shrink-0 text-right text-sm font-medium text-neutral-200">
+              <span className="w-6 shrink-0 text-right text-[13px] font-bold text-neutral-200">
                 {linha.total}
               </span>
             </div>
           ))}
 
           {ranking.length === 0 && (
-            <p className="rounded-xl border border-dashed border-neutral-700 px-4 py-6 text-center text-sm text-neutral-400">
+            <p className="rounded-2xl border border-dashed border-white/12 px-4 py-6 text-center text-sm text-neutral-400">
               Nenhuma Story publicada ainda.
             </p>
           )}
@@ -174,24 +174,24 @@ export default async function RelatoriosDeMencoesPage({ params }: { params: { id
       </div>
 
       {/* Detalhamento diário */}
-      <div className="mt-8">
-        <h3 className="text-sm font-semibold text-neutral-200">
+      <div className="mt-9">
+        <h3 className="text-[13.5px] font-bold text-neutral-200">
           Detalhamento diário (últimos {DIAS_NO_DETALHAMENTO} dias)
         </h3>
         <p className="mt-1 text-xs text-neutral-500">
           Histórico mais antigo continua disponível nos arquivos exportados, logo abaixo.
         </p>
 
-        <div className="mt-3 flex flex-col gap-4">
+        <div className="mt-3.5 flex flex-col gap-3.5">
           {diasOrdenados.map((chave) => {
             const mencoesDoDia = porDia.get(chave)!;
             return (
-              <div key={chave} className="rounded-xl border border-neutral-800 bg-neutral-900">
-                <div className="flex items-center justify-between border-b border-neutral-800 px-4 py-2.5">
-                  <p className="text-sm font-medium capitalize text-neutral-200">
+              <div key={chave} className="rounded-2xl border border-white/8 bg-ink-900">
+                <div className="flex items-center justify-between border-b border-white/8 px-4 py-3">
+                  <p className="text-[13px] font-bold capitalize text-neutral-200">
                     {formatarDataLonga(mencoesDoDia[0].recebido_em)}
                   </p>
-                  <span className="rounded-full border border-neutral-700 bg-neutral-800 px-2 py-0.5 text-[11px] text-neutral-300">
+                  <span className="rounded-full bg-white/8 px-2.5 py-1 text-[10.5px] font-semibold text-neutral-300">
                     {mencoesDoDia.length} menç{mencoesDoDia.length === 1 ? "ão" : "ões"}
                   </span>
                 </div>
@@ -200,34 +200,34 @@ export default async function RelatoriosDeMencoesPage({ params }: { params: { id
                   <table className="w-full text-left text-xs">
                     <thead>
                       <tr className="text-neutral-500">
-                        <th className="px-4 py-2 font-medium">Loja</th>
-                        <th className="px-2 py-2 font-medium">@usuário</th>
-                        <th className="px-2 py-2 font-medium">Postado</th>
-                        <th className="px-2 py-2 font-medium">Republicado</th>
-                        <th className="px-2 py-2 font-medium">Status</th>
+                        <th className="px-4 py-2 font-semibold">Loja</th>
+                        <th className="px-2 py-2 font-semibold">@usuário</th>
+                        <th className="px-2 py-2 font-semibold">Postado</th>
+                        <th className="px-2 py-2 font-semibold">Republicado</th>
+                        <th className="px-2 py-2 font-semibold">Status</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-neutral-800">
+                    <tbody className="divide-y divide-white/8">
                       {mencoesDoDia.map((m) => {
                         const rotulo = ROTULO_DO_STATUS[m.status] ?? {
                           texto: m.status,
-                          classe: "border-neutral-700 bg-neutral-900 text-neutral-400",
+                          classe: "bg-white/8 text-neutral-400",
                         };
                         return (
                           <tr key={m.id}>
-                            <td className="px-4 py-2 text-neutral-200">
+                            <td className="px-4 py-2.5 text-neutral-200">
                               {nomePorLoja.get(m.loja_id) ?? "Loja removida"}
                             </td>
-                            <td className="px-2 py-2 text-neutral-400">
+                            <td className="px-2 py-2.5 text-neutral-400">
                               {m.instagram_username ? `@${m.instagram_username}` : "—"}
                             </td>
-                            <td className="px-2 py-2 text-neutral-400">{formatarHora(m.recebido_em)}</td>
-                            <td className="px-2 py-2 text-neutral-400">
+                            <td className="px-2 py-2.5 text-neutral-400">{formatarHora(m.recebido_em)}</td>
+                            <td className="px-2 py-2.5 text-neutral-400">
                               {m.publicado_em ? formatarHora(m.publicado_em) : "—"}
                             </td>
-                            <td className="px-2 py-2">
-                              <span className={`rounded-full border px-2 py-0.5 text-[10px] ${rotulo.classe}`}>
-                                {rotulo.texto}
+                            <td className="px-2 py-2.5">
+                              <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold ${rotulo.classe}`}>
+                                {rotulo.texto.toUpperCase()}
                               </span>
                             </td>
                           </tr>
@@ -241,7 +241,7 @@ export default async function RelatoriosDeMencoesPage({ params }: { params: { id
           })}
 
           {diasOrdenados.length === 0 && (
-            <p className="rounded-xl border border-dashed border-neutral-700 px-4 py-6 text-center text-sm text-neutral-400">
+            <p className="rounded-2xl border border-dashed border-white/12 px-4 py-6 text-center text-sm text-neutral-400">
               Nenhuma menção nos últimos {DIAS_NO_DETALHAMENTO} dias.
             </p>
           )}
@@ -249,22 +249,22 @@ export default async function RelatoriosDeMencoesPage({ params }: { params: { id
       </div>
 
       {/* Exportações automáticas */}
-      <div className="mt-8">
-        <h3 className="text-sm font-semibold text-neutral-200">Exportações automáticas</h3>
+      <div className="mt-9">
+        <h3 className="text-[13.5px] font-bold text-neutral-200">Exportações automáticas</h3>
         <p className="mt-1 text-xs text-neutral-500">
           Um arquivo CSV é gerado sozinho a cada 30 dias com o histórico completo do período — dá
           pra abrir no Excel/Google Sheets. Os links de download valem por 1 hora depois de abrir
           essa página.
         </p>
 
-        <div className="mt-3 flex flex-col gap-2">
+        <div className="mt-3.5 flex flex-col gap-2.5">
           {(exportacoes ?? []).map((exp) => (
             <div
               key={exp.id}
-              className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-neutral-800 bg-neutral-900 px-4 py-3"
+              className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/8 bg-ink-900 px-4 py-3.5"
             >
               <div>
-                <p className="text-sm text-neutral-200">
+                <p className="text-[13px] font-semibold text-neutral-200">
                   {formatarDataCurta(exp.periodo_inicio)} – {formatarDataCurta(exp.periodo_fim)}
                 </p>
                 <p className="mt-0.5 text-xs text-neutral-500">
@@ -274,7 +274,7 @@ export default async function RelatoriosDeMencoesPage({ params }: { params: { id
               {urlPorCaminho.get(exp.storage_path) ? (
                 <a
                   href={urlPorCaminho.get(exp.storage_path) ?? undefined}
-                  className="shrink-0 rounded-lg border border-neutral-700 bg-neutral-800 px-3 py-1.5 text-xs font-medium text-neutral-200 hover:bg-neutral-700"
+                  className="shrink-0 rounded-[9px] border border-white/14 px-3.5 py-1.5 text-xs font-semibold text-neutral-200 hover:bg-white/5"
                 >
                   Baixar CSV
                 </a>
@@ -285,7 +285,7 @@ export default async function RelatoriosDeMencoesPage({ params }: { params: { id
           ))}
 
           {(exportacoes ?? []).length === 0 && (
-            <p className="rounded-xl border border-dashed border-neutral-700 px-4 py-6 text-center text-sm text-neutral-400">
+            <p className="rounded-2xl border border-dashed border-white/12 px-4 py-6 text-center text-sm text-neutral-400">
               Ainda não passou o primeiro ciclo de 30 dias — a primeira exportação aparece aqui
               automaticamente.
             </p>

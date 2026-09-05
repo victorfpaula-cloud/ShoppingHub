@@ -32,10 +32,10 @@ export default function ConectarForm({
       {paginas.map((pagina) => (
         <label
           key={pagina.page_id}
-          className="flex cursor-pointer items-center justify-between rounded-xl border border-neutral-800 bg-neutral-900 px-4 py-3 has-[:checked]:border-neutral-400"
+          className="flex cursor-pointer items-center justify-between rounded-2xl border border-white/8 bg-ink-900 px-4 py-3.5 has-[:checked]:border-accent has-[:checked]:bg-accent/8"
         >
           <div>
-            <div className="text-sm font-medium">{pagina.page_name}</div>
+            <div className="text-[13.5px] font-bold">{pagina.page_name}</div>
             <div className="text-xs text-neutral-400">@{pagina.instagram_username}</div>
           </div>
           <input
@@ -45,6 +45,7 @@ export default function ConectarForm({
             required
             checked={paginaEscolhida === pagina.page_id}
             onChange={() => setPaginaEscolhida(pagina.page_id)}
+            className="accent-accent"
           />
         </label>
       ))}
@@ -52,10 +53,10 @@ export default function ConectarForm({
       <button
         type="submit"
         disabled={enviando || !paginaEscolhida}
-        className="mt-2 flex items-center justify-center gap-2 rounded-xl bg-neutral-100 px-4 py-3 text-sm font-medium text-neutral-950 disabled:opacity-60"
+        className="mt-2 flex items-center justify-center gap-2 rounded-[11px] bg-accent px-4 py-3 text-sm font-bold text-white shadow-[0_8px_20px_-8px_rgba(124,110,242,0.55)] transition hover:bg-accent-strong disabled:opacity-60"
       >
         {enviando && (
-          <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-neutral-950/30 border-t-neutral-950" />
+          <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
         )}
         {enviando ? "Conectando…" : "Conectar"}
       </button>
