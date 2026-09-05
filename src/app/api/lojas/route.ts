@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { criarClienteAdmin } from "@/lib/supabase/admin";
+import { paginaDeConfirmacaoDuplicidade } from "@/lib/confirmacaoDuplicidade";
 
 export async function POST(request: NextRequest) {
   const formData = await request.formData();
@@ -22,6 +23,32 @@ export async function POST(request: NextRequest) {
   }
 
   const admin = criarClienteAdmin();
+
+  // Avisa (sem bloquear de vez) se já existe uma loja com esse mesmo nome nesse shopping — pode
+  // ser engano (clicou "criar" duas vezes) ou pode ser mesmo uma segunda loja com nome parecido;
+  // quem decide é quem está cadastrando. `ilike` sem "%" já compara ignorando maiúscula/minúscula.
+  if (formData.get("confirmar")?.toString() !== "1") {
+    const { data: lojaComMesmoNome } = await admin
+      .from("shoppinghub_lojas")
+      .select("id")
+      .eq("shopping_id", shoppingId)
+      .ilike("nome", nome)
+      .maybeSingle();
+
+    if (lojaComMesmoNome) {
+      const html = paginaDeConfirmacaoDuplicidade(
+        formData,
+        "/api/lojas",
+        [
+          `Já existe uma loja chamada "${nome}" cadastrada nesse shopping.`,
+          "Tem certeza que deseja cadastrar esse lojista novamente?",
+        ],
+        `/shoppings/${shoppingId}/lojas/novo`,
+        "Cadastrar mesmo assim"
+      );
+      return new NextResponse(html, { headers: { "Content-Type": "text/html; charset=utf-8" } });
+    }
+  }
 
   // Lojas novas entram no fim da lista de exibição — soma 1 na maior "ordem" já usada nesse
   // shopping (começa em 1 se ainda não tiver nenhuma loja).

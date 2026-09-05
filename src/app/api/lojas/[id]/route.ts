@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { criarClienteAdmin } from "@/lib/supabase/admin";
+import { paginaDeConfirmacaoDuplicidade } from "@/lib/confirmacaoDuplicidade";
 
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   const formData = await request.formData();
@@ -50,6 +51,63 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   }
 
   const admin = criarClienteAdmin();
+
+  // Avisa (sem bloquear de vez) se o nome ou algum dos @usuários já pertence a OUTRA loja desse
+  // mesmo shopping — nome duplicado é só um alerta (pode ser proposital), mas @usuário duplicado é
+  // mais sério: é ele que decide pra qual loja vai cada menção de Story (ver processarMencaoRecebida
+  // em mencoes.ts), então duas lojas com o mesmo @usuário deixa esse roteamento ambíguo. De
+  // qualquer forma, quem decide se segue mesmo assim é quem está cadastrando.
+  if (formData.get("confirmar")?.toString() !== "1") {
+    const avisos: string[] = [];
+
+    const { data: lojaComMesmoNome } = await admin
+      .from("shoppinghub_lojas")
+      .select("id")
+      .eq("shopping_id", shoppingId)
+      .neq("id", params.id)
+      .ilike("nome", nome)
+      .maybeSingle();
+
+    if (lojaComMesmoNome) {
+      avisos.push(`Já existe outra loja chamada "${nome}" cadastrada nesse shopping.`);
+    }
+
+    const usernamesInformados = [instagramUsername, instagramUsername2].filter(
+      (u): u is string => Boolean(u)
+    );
+
+    if (usernamesInformados.length > 0) {
+      const filtroDeUsername = usernamesInformados
+        .flatMap((u) => [`instagram_username.eq.${u}`, `instagram_username_2.eq.${u}`])
+        .join(",");
+
+      const { data: lojasComMesmoUsername } = await admin
+        .from("shoppinghub_lojas")
+        .select("nome")
+        .eq("shopping_id", shoppingId)
+        .neq("id", params.id)
+        .or(filtroDeUsername);
+
+      if (lojasComMesmoUsername && lojasComMesmoUsername.length > 0) {
+        avisos.push(
+          `O @usuário informado já está cadastrado na loja "${lojasComMesmoUsername[0].nome}" desse shopping.`
+        );
+      }
+    }
+
+    if (avisos.length > 0) {
+      avisos.push("Tem certeza que deseja salvar mesmo assim?");
+      const html = paginaDeConfirmacaoDuplicidade(
+        formData,
+        `/api/lojas/${params.id}`,
+        avisos,
+        destino,
+        "Salvar mesmo assim"
+      );
+      return new NextResponse(html, { headers: { "Content-Type": "text/html; charset=utf-8" } });
+    }
+  }
+
   const { error } = await admin
     .from("shoppinghub_lojas")
     .update({
