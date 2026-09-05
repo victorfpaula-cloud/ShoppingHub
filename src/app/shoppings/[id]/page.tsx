@@ -1,14 +1,8 @@
 import { criarClienteAdmin } from "@/lib/supabase/admin";
 import { inicioDoDiaBrasiliaISO } from "@/lib/mencoes";
-import { iniciaisDoNome } from "@/lib/iniciais";
 import { BotaoAtualizar } from "@/components/BotaoAtualizar";
 
 export const dynamic = "force-dynamic";
-
-// Avatar de loja sempre no mesmo tom de roxo (pedido em 06/09/2026 — o grid com várias cores por
-// índice ficava poluído visualmente); só a "Geral" (fallback) ou loja inativa usa o tom neutro, pra
-// não competir com as lojas de verdade.
-const COR_AVATAR: readonly [string, string] = ["#8f82ff", "#6a5bde"];
 
 function formatarHora(iso: string): string {
   return new Intl.DateTimeFormat("pt-BR", {
@@ -78,10 +72,12 @@ export default async function LojasDoShoppingPage({
     .eq("shopping_id", params.id);
 
   // Ordem alfabética pelo nome (pedido em 06/09/2026) — comparação com `localeCompare` em vez de
-  // deixar o Postgres ordenar, pra tratar acentos (ex.: "Óticas") do jeito esperado em pt-BR.
-  const lojas = [...(lojasEncontradas ?? [])].sort((a, b) =>
-    a.nome.localeCompare(b.nome, "pt-BR", { sensitivity: "base" })
-  );
+  // deixar o Postgres ordenar, pra tratar acentos (ex.: "Óticas") do jeito esperado em pt-BR. A
+  // loja "Geral" (fallback) sempre vem primeiro, fora da ordem alfabética (pedido em 06/09/2026).
+  const lojas = [...(lojasEncontradas ?? [])].sort((a, b) => {
+    if (a.eh_geral !== b.eh_geral) return a.eh_geral ? -1 : 1;
+    return a.nome.localeCompare(b.nome, "pt-BR", { sensitivity: "base" });
+  });
 
   const idsDasLojas = lojas.map((l) => l.id);
 
@@ -175,9 +171,6 @@ export default async function LojasDoShoppingPage({
           const publicadosHojeDaLoja = publicadosHojePorLoja.get(loja.id) ?? 0;
           const errosDaLoja = errosPorLoja.get(loja.id) ?? 0;
 
-          const usaAvatarNeutro = !loja.ativo || loja.eh_geral;
-          const [corInicio, corFim] = usaAvatarNeutro ? ["#2a2c33", "#2a2c33"] : COR_AVATAR;
-
           return (
             <a
               key={loja.id}
@@ -211,10 +204,15 @@ export default async function LojasDoShoppingPage({
               <div className="flex items-center justify-between gap-2">
                 <div className="flex min-w-0 items-center gap-2.5">
                   <div
-                    className="font-display flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[10px] text-[13px] font-bold text-white"
-                    style={{ background: `linear-gradient(155deg, ${corInicio}, ${corFim})` }}
+                    className={`flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[10px] border ${
+                      loja.eh_geral
+                        ? "border-sky-400/25 bg-sky-400/10 text-sky-400"
+                        : "border-white/8 bg-white/[0.04] text-neutral-400"
+                    }`}
                   >
-                    {iniciaisDoNome(loja.nome)}
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M3 9l1-5h16l1 5M4 9v10a1 1 0 0 0 1 1h4v-6h6v6h4a1 1 0 0 0 1-1V9M3 9h18" />
+                    </svg>
                   </div>
                   <span className="truncate text-[13.5px] font-bold">{loja.nome}</span>
                   {loja.eh_geral && (
