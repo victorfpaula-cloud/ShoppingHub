@@ -205,12 +205,18 @@ async function aguardarContainerPronto(
  * `reply_to.story.id` na hora de rotear a resposta do cliente pra loja certa.
  *
  * `usernameParaMarcar`, quando informado, usa o campo `user_tags` (suportado pra Stories de
- * imagem e vídeo desde 09/07/2025) pra criar uma marcação clicável de verdade da loja que gerou a
- * menção — {x, y} é só a posição da marcação na mídia (0.0–1.0, a partir do canto superior
- * esquerdo). Usa a MESMA posição vertical da faixa de crédito (`POSICAO_Y_CREDITO`, ver
- * creditoNaImagem.ts) — fora dessa faixa segura, perto do rodapé, a barra de "responder" que o
- * próprio Instagram desenha por cima da Story intercepta o toque e a figurinha não fica clicável
- * (confirmado em teste real em 04/09/2026).
+ * imagem e vídeo desde 09/07/2025) pra marcar a loja que gerou a menção — {x, y} é a posição
+ * declarada da marcação na mídia (0.0–1.0, a partir do canto superior esquerdo), exigida pela
+ * Meta mesmo sem efeito visual (ver abaixo). Usa a MESMA posição vertical da faixa de crédito
+ * (`POSICAO_Y_CREDITO`, ver creditoNaImagem.ts) só por consistência.
+ *
+ * IMPORTANTE (confirmado em 05/09/2026, depois de duas Stories publicadas sem nenhuma marcação
+ * visível mesmo com o container criado sem erro nenhum): esse `user_tags` NÃO desenha nenhuma
+ * figurinha/selo visível na Story — a documentação oficial da Meta é explícita que publicar
+ * "stickers" (que é como ela classifica a marcação visual, clicável) não é suportado pela Content
+ * Publishing API, só a menção "sem sticker" (nos bastidores). Quem dá o crédito visível de verdade
+ * é a faixa queimada na própria mídia (`adicionarFaixaDeCredito` pra imagem, dentro de
+ * `comprimirVideo` pra vídeo) — isso aqui só serve pra notificar a loja de que foi mencionada.
  */
 export async function publicarStoryNoInstagram(
   tokenDaConta: string,

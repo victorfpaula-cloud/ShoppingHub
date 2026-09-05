@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
 
   const { data: mencoes, error } = await admin
     .from("shoppinghub_mencoes")
-    .select("id, status, storage_path")
+    .select("id, status, storage_path, instagram_username")
     .in("status", ["pendente", "erro"])
     .not("storage_path", "is", null)
     .like("storage_path", "%.mp4");
@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
       }
 
       const bytesOriginais = new Uint8Array(await arquivo.arrayBuffer());
-      const comprimido = await comprimirVideo(bytesOriginais);
+      const comprimido = await comprimirVideo(bytesOriginais, mencao.instagram_username ?? "");
 
       const { error: erroUpload } = await admin.storage
         .from(BUCKET_MENCOES)

@@ -7,9 +7,9 @@ import { readFile } from "node:fs/promises";
  * Sobrepõe uma faixa semitransparente com o @usuário de quem marcou o shopping no Story, antes
  * de guardar/publicar — dá crédito visível à loja na Story republicada.
  *
- * Só funciona pra IMAGEM: a API de publicação de Stories da Meta não permite editar vídeo (e
- * processar vídeo exigiria ffmpeg, inviável numa function serverless). Vídeo passa direto, sem
- * a faixa — quem chama essa função já lida com esse caso (`ehImagem` abaixo).
+ * Só funciona pra IMAGEM (usa sharp, biblioteca de imagem raster). Vídeo recebe a mesma faixa,
+ * na mesma posição (`POSICAO_Y_CREDITO`, exportada daqui), mas queimada via ffmpeg dentro de
+ * `comprimirVideo.ts` — quem chama essa função já lida com esse caso (`ehImagem` abaixo).
  */
 export function ehImagem(contentType: string): boolean {
   return contentType.includes("image");
