@@ -231,6 +231,18 @@ export async function publicarStoryNoInstagram(
     ? { user_tags: [{ username: usernameParaMarcar, x: 0.5, y: POSICAO_Y_CREDITO }] }
     : {};
 
+  // Log de diagnóstico (adicionado em 05/09/2026, depois de uma Story ir pro ar sem a marcação
+  // sem nenhuma pista do motivo nos logs): mostra ANTES de mandar pra Meta se a gente sequer
+  // tentou marcar alguém, e depois mostra a resposta bruta da criação do container — a Meta pode
+  // aceitar a requisição (200 OK) e mesmo assim ignorar/descartar um user_tags inválido sem
+  // sinalizar erro nenhum, então só dá pra saber comparando o que foi enviado com o que ela
+  // devolveu.
+  console.log(
+    usernameParaMarcar
+      ? `publicarStoryNoInstagram: tentando marcar @${usernameParaMarcar}`
+      : "publicarStoryNoInstagram: sem username pra marcar (usernameParaMarcar vazio)"
+  );
+
   const respostaContainer = await fetch(
     `https://graph.facebook.com/${GRAPH_API_VERSION}/${instagramUserId}/media`,
     {
@@ -246,14 +258,21 @@ export async function publicarStoryNoInstagram(
     }
   );
 
+  const corpoContainerBruto = await respostaContainer.text().catch(() => "");
+  console.log(`publicarStoryNoInstagram: resposta da criação do container: ${corpoContainerBruto}`);
+
   if (!respostaContainer.ok) {
-    const corpoErro = await respostaContainer.text().catch(() => "");
     throw new Error(
-      `Falha ao criar container de Story (status ${respostaContainer.status}): ${corpoErro}`
+      `Falha ao criar container de Story (status ${respostaContainer.status}): ${corpoContainerBruto}`
     );
   }
 
-  const dadosContainer = await respostaContainer.json();
+  let dadosContainer: any = null;
+  try {
+    dadosContainer = JSON.parse(corpoContainerBruto);
+  } catch {
+    // segue com dadosContainer null — o texto bruto já ficou logado acima
+  }
   const containerId = dadosContainer?.id as string | undefined;
 
   if (!containerId) {

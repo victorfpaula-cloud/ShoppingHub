@@ -46,14 +46,20 @@ export async function GET(request: NextRequest) {
   };
 
   // Vídeo pode levar até ~40s só esperando a Meta processar (ver aguardarContainerPronto em
-  // metaMessaging.ts) — com várias menções de vídeo na fila, publicar todas na mesma execução
-  // estourava os 60s totais que a Vercel permite (Vercel Runtime Timeout, visto em produção em
-  // 05/09/2026), o que também impedia a limpeza de mensagens e a exportação de rodar. Por isso,
-  // para de pegar itens NOVOS assim que o tempo já gasto se aproxima do limite — o que sobrar
-  // fica "pendente" e é pego na próxima execução do cron, sem nunca arriscar estourar o tempo
-  // total da function.
+  // metaMessaging.ts) — um único item já pode consumir quase o orçamento inteiro sozinho. A
+  // primeira versão desse limite (45s pra parar de pegar itens novos) não bastou: um item que
+  // começa aos 44s ainda pode estourar os 60s totais que a Vercel permite, matando a function no
+  // meio (Vercel Runtime Timeout visto em produção em 05/09/2026 — a menção em andamento fica
+  // "pendente" pra sempre, sem nem cair no catch daqui, e nada depois dela roda, nem a
+  // limpeza/exportação do final). Duas camadas de proteção agora:
+  //   1. Só começa um item novo se sobrar bastante margem (10s) — folga suficiente pro pior caso
+  //      de um item sozinho (~45-50s) nunca ultrapassar o total de 60s.
+  //   2. Cada item individual tem um prazo próprio (48s) — se estourar, é tratado como falha
+  //      normal (cai no catch, marca "erro" com mensagem clara) em vez de deixar a Vercel matar a
+  //      function sem aviso nenhum.
   const inicioDaExecucao = Date.now();
-  const LIMITE_MS_PARA_NOVOS_ITENS = 45_000;
+  const LIMITE_MS_PARA_NOVOS_ITENS = 10_000;
+  const PRAZO_MS_POR_ITEM = 48_000;
 
   for (const mencao of mencoesPendentes ?? []) {
     if (Date.now() - inicioDaExecucao > LIMITE_MS_PARA_NOVOS_ITENS) {
@@ -62,7 +68,7 @@ export async function GET(request: NextRequest) {
     }
 
     try {
-      await publicarMencao(admin, mencao);
+      await comPrazo(publicarMencao(admin, mencao), PRAZO_MS_POR_ITEM);
       resultado.publicadas += 1;
     } catch (erro) {
       console.error(`Falha ao publicar menção ${mencao.id}:`, erro);
@@ -78,6 +84,29 @@ export async function GET(request: NextRequest) {
   const exportacoesGeradas = await exportarRelatoriosDevidos(admin);
 
   return NextResponse.json({ ok: true, ...resultado, mensagensApagadas, exportacoesGeradas });
+}
+
+// Corre em paralelo com a promessa recebida — quem terminar primeiro decide. Sem isso, um item
+// travado (por exemplo a Meta nunca respondendo) ficaria preso até a própria Vercel matar a
+// function inteira sem aviso (ver comentário acima, no início do arquivo); com isso, vira uma
+// falha comum, tratada pelo catch do loop, com uma mensagem de erro clara.
+function comPrazo<T>(promessa: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const temporizador = setTimeout(() => {
+      reject(new Error(`Excedeu o prazo de ${ms}ms.`));
+    }, ms);
+
+    promessa.then(
+      (valor) => {
+        clearTimeout(temporizador);
+        resolve(valor);
+      },
+      (erro) => {
+        clearTimeout(temporizador);
+        reject(erro);
+      }
+    );
+  });
 }
 
 async function publicarMencao(
@@ -115,6 +144,12 @@ async function publicarMencao(
     urlPublica.publicUrl,
     tipoDeMidia,
     mencao.instagram_username
+  );
+
+  console.log(
+    `Menção ${mencao.id} publicada (storyMediaId ${storyMediaId}), username pra marcar: ${
+      mencao.instagram_username ?? "(nenhum)"
+    }`
   );
 
   await admin
