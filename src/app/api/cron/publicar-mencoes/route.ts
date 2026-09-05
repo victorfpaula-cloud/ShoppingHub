@@ -46,29 +46,38 @@ export async function GET(request: NextRequest) {
   };
 
   // Vídeo pode levar até ~40s só esperando a Meta processar (ver aguardarContainerPronto em
-  // metaMessaging.ts) — um único item já pode consumir quase o orçamento inteiro sozinho. A
-  // primeira versão desse limite (45s pra parar de pegar itens novos) não bastou: um item que
-  // começa aos 44s ainda pode estourar os 60s totais que a Vercel permite, matando a function no
-  // meio (Vercel Runtime Timeout visto em produção em 05/09/2026 — a menção em andamento fica
-  // "pendente" pra sempre, sem nem cair no catch daqui, e nada depois dela roda, nem a
-  // limpeza/exportação do final). Duas camadas de proteção agora:
-  //   1. Só começa um item novo se sobrar bastante margem (10s) — folga suficiente pro pior caso
-  //      de um item sozinho (~45-50s) nunca ultrapassar o total de 60s.
-  //   2. Cada item individual tem um prazo próprio (48s) — se estourar, é tratado como falha
-  //      normal (cai no catch, marca "erro" com mensagem clara) em vez de deixar a Vercel matar a
-  //      function sem aviso nenhum.
+  // metaMessaging.ts) — um único item já pode consumir quase o orçamento inteiro sozinho, enquanto
+  // imagem processa bem mais rápido (~12s no pior caso). Um limite ÚNICO pra "parar de pegar item
+  // novo" não dá pra acertar pros dois casos: 45s deixava passar vídeo demais perto do limite
+  // (Vercel Runtime Timeout visto em produção em 05/09/2026), e apertar demais esse limite pra
+  // corrigir isso (10s) resolveu o timeout mas criou um problema novo, também visto na prática:
+  // como QUALQUER item real (imagem inclusive) já passa de 10s sozinho, sobrava só o PRIMEIRO item
+  // da fila por execução — o resto sempre ficava "adiado" mesmo sem nenhum erro, e a fila só
+  // esvaziava clicando em "Run" um por um.
+  //
+  // Em vez de um limite fixo, calcula quanto cada item AINDA POR VIR provavelmente vai precisar
+  // (vídeo ou imagem) e só começa se sobrar orçamento suficiente pra esse pior caso — isso deixa
+  // várias imagens seguidas rodarem na mesma execução (cada uma precisa de pouco), e ainda protege
+  // contra estourar o total quando o próximo item é vídeo. Continua garantido no máximo 1 vídeo
+  // "grande" por execução — isso é físico: um vídeo sozinho já pode gastar quase todo o orçamento
+  // de 60s que a Vercel permite no plano Hobby, não dá pra caber dois com segurança na mesma
+  // chamada. Múltiplos vídeos na fila continuam saindo, só que em execuções seguintes (o cron
+  // automático roda 2x por dia, ou clique em "Run" de novo pra não esperar).
   const inicioDaExecucao = Date.now();
-  const LIMITE_MS_PARA_NOVOS_ITENS = 10_000;
-  const PRAZO_MS_POR_ITEM = 48_000;
+  const TEMPO_TOTAL_DISPONIVEL_MS = 55_000; // um pouco abaixo dos 60s da Vercel, sobra pra limpeza/exportação do final
+  const PRAZO_MS_VIDEO = 48_000;
+  const PRAZO_MS_IMAGEM = 15_000;
 
   for (const mencao of mencoesPendentes ?? []) {
-    if (Date.now() - inicioDaExecucao > LIMITE_MS_PARA_NOVOS_ITENS) {
+    const prazoDoItem = mencao.storage_path?.endsWith(".mp4") ? PRAZO_MS_VIDEO : PRAZO_MS_IMAGEM;
+
+    if (Date.now() - inicioDaExecucao + prazoDoItem > TEMPO_TOTAL_DISPONIVEL_MS) {
       resultado.adiadas += 1;
       continue;
     }
 
     try {
-      await comPrazo(publicarMencao(admin, mencao), PRAZO_MS_POR_ITEM);
+      await comPrazo(publicarMencao(admin, mencao), prazoDoItem);
       resultado.publicadas += 1;
     } catch (erro) {
       console.error(`Falha ao publicar menção ${mencao.id}:`, erro);
