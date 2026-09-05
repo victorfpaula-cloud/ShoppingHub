@@ -8,6 +8,27 @@ import os from "node:os";
 const execFileAsync = promisify(execFile);
 
 const DURACAO_MAXIMA_SEGUNDOS = 10;
+// Margem sobre o corte de 10s — dá espaço pra pequena imprecisão de arredondamento do ffmpeg sem
+// achar que um vídeo já cortado por essa mesma função "ainda precisa" ser reprocessado.
+const DURACAO_JA_OK_SEGUNDOS = DURACAO_MAXIMA_SEGUNDOS + 0.5;
+
+/**
+ * Lê a duração do vídeo sem precisar do ffprobe (não vem junto com o ffmpeg-static) — truque
+ * conhecido: rodar o ffmpeg só com `-i` (sem arquivo de saída) sempre "falha", mas antes de falhar
+ * ele imprime os metadados do arquivo (incluindo "Duration: HH:MM:SS.ms") no stderr.
+ */
+async function obterDuracaoSegundos(caminhoArquivo: string): Promise<number | null> {
+  try {
+    await execFileAsync(ffmpegPath!, ["-i", caminhoArquivo, "-hide_banner"]);
+    return null;
+  } catch (erro) {
+    const stderr = (erro as { stderr?: string })?.stderr ?? "";
+    const encontrado = stderr.match(/Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/);
+    if (!encontrado) return null;
+    const [, horas, minutos, segundos] = encontrado;
+    return Number(horas) * 3600 + Number(minutos) * 60 + Number(segundos);
+  }
+}
 
 /**
  * Corta o vídeo pros primeiros 10 segundos e recomprime num formato garantidamente compatível
@@ -15,6 +36,13 @@ const DURACAO_MAXIMA_SEGUNDOS = 10;
  * chega (não na hora de publicar) — resolve de uma vez: vídeos longos ou muito grandes que a Meta
  * nunca terminava de processar (visto na prática em 05/09/2026, container preso em "IN_PROGRESS"
  * mesmo com quase um minuto de espera), e reduz o espaço ocupado no Storage.
+ *
+ * Se o vídeo já tem 10s ou menos (por exemplo, já passou por essa função antes — a ferramenta de
+ * recomprimir vídeos antigos processa a mesma lista inteira a cada vez que é aberta, já que não
+ * guarda "o que já foi feito"), pula a recompressão e devolve os bytes originais direto — sem essa
+ * checagem, reprocessar os mesmos vídeos já certos toda hora consumia o tempo todo da execução
+ * antes de chegar nos que realmente ainda precisavam (visto na prática em 05/09/2026: os mesmos 5
+ * vídeos ficavam de fora em toda tentativa).
  */
 export async function comprimirVideo(
   bytes: Uint8Array
@@ -29,6 +57,11 @@ export async function comprimirVideo(
 
   try {
     await writeFile(caminhoEntrada, Buffer.from(bytes));
+
+    const duracaoAtual = await obterDuracaoSegundos(caminhoEntrada);
+    if (duracaoAtual !== null && duracaoAtual <= DURACAO_JA_OK_SEGUNDOS) {
+      return { bytes, contentType: "video/mp4" };
+    }
 
     await execFileAsync(ffmpegPath, [
       "-y",
