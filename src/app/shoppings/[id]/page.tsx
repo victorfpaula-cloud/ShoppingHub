@@ -17,6 +17,21 @@ export default async function LojasDoShoppingPage({
     .eq("shopping_id", params.id)
     .order("ordem", { ascending: true });
 
+  const idsDasLojas = (lojas ?? []).map((l) => l.id);
+  const { data: mencoesPendentes } =
+    idsDasLojas.length > 0
+      ? await admin
+          .from("shoppinghub_mencoes")
+          .select("loja_id")
+          .in("loja_id", idsDasLojas)
+          .eq("status", "pendente")
+      : { data: [] as { loja_id: string }[] };
+
+  const agendadosPorLoja = new Map<string, number>();
+  for (const m of mencoesPendentes ?? []) {
+    agendadosPorLoja.set(m.loja_id, (agendadosPorLoja.get(m.loja_id) ?? 0) + 1);
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between">
@@ -70,6 +85,13 @@ export default async function LojasDoShoppingPage({
                   ? "Com base de conhecimento"
                   : "Sem base de conhecimento ainda"}
               </span>
+              {(agendadosPorLoja.get(loja.id) ?? 0) > 0 && (
+                <span className="rounded-full border border-sky-900 bg-sky-950 px-2 py-0.5 text-sky-300">
+                  {agendadosPorLoja.get(loja.id)} stor
+                  {agendadosPorLoja.get(loja.id) === 1 ? "y" : "ies"} agendado
+                  {agendadosPorLoja.get(loja.id) === 1 ? "" : "s"}
+                </span>
+              )}
             </div>
           </a>
         ))}

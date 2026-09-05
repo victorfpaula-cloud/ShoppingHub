@@ -267,3 +267,29 @@ create trigger shoppinghub_shoppings_seed_loja_geral
 insert into storage.buckets (id, name, public)
 values ('shoppinghub-mencoes', 'shoppinghub-mencoes', true)
 on conflict (id) do nothing;
+
+-- ============================================================================
+-- Registro de exportações automáticas do relatório de menções (a cada 30 dias, disparado pelo
+-- cron existente de publicar-mencoes — ver src/lib/relatorios.ts). Uma linha por exportação
+-- gerada, por shopping.
+-- ============================================================================
+create table if not exists shoppinghub_exportacoes_mencoes (
+  id uuid primary key default gen_random_uuid(),
+  shopping_id uuid not null references shoppinghub_shoppings(id) on delete cascade,
+  periodo_inicio timestamptz not null,
+  periodo_fim timestamptz not null,
+  storage_path text not null,
+  total_mencoes integer not null default 0,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists shoppinghub_exportacoes_mencoes_shopping_idx
+  on shoppinghub_exportacoes_mencoes(shopping_id, periodo_fim desc);
+
+alter table shoppinghub_exportacoes_mencoes enable row level security;
+
+-- Bucket PRIVADO (diferente do shoppinghub-mencoes, que precisa ser público pra Meta baixar a
+-- mídia) — os CSVs só são acessados de dentro do painel autenticado, via URL assinada temporária.
+insert into storage.buckets (id, name, public)
+values ('shoppinghub-relatorios', 'shoppinghub-relatorios', false)
+on conflict (id) do nothing;

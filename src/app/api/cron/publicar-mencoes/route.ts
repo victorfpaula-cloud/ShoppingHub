@@ -3,6 +3,7 @@ import { criarClienteAdmin } from "@/lib/supabase/admin";
 import { publicarStoryNoInstagram } from "@/lib/metaMessaging";
 import { BUCKET_MENCOES, tipoDeMidiaPorContentType } from "@/lib/mencoes";
 import { limparMensagensAntigas } from "@/lib/retencao";
+import { exportarRelatoriosDevidos } from "@/lib/relatorios";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -51,10 +52,12 @@ export async function GET(request: NextRequest) {
   }
 
   // Aproveita esse mesmo cron (já roda duas vezes por dia) pra também limpar mensagens antigas do
-  // histórico de atendimento — evita criar um cron novo só pra isso.
+  // histórico de atendimento e gerar a exportação mensal de relatórios — evita criar mais crons só
+  // pra isso (o plano Hobby da Vercel só permite 2).
   const mensagensApagadas = await limparMensagensAntigas(admin);
+  const exportacoesGeradas = await exportarRelatoriosDevidos(admin);
 
-  return NextResponse.json({ ok: true, ...resultado, mensagensApagadas });
+  return NextResponse.json({ ok: true, ...resultado, mensagensApagadas, exportacoesGeradas });
 }
 
 async function publicarMencao(
