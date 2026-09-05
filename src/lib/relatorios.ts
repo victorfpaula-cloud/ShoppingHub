@@ -41,7 +41,45 @@ export type MencaoParaCSV = {
   story_media_id: string | null;
 };
 
+// Mesmo resumo que aparece no topo da página de Relatórios (container "Resumo do período") — pedido
+// em 06/09/2026 pra também sair no cabeçalho do CSV exportado, calculado em cima do mesmo período
+// que já foi filtrado antes de chamar gerarCsv (automático a cada 30 dias, ou manual via
+// api/shoppings/[id]/relatorios/exportar).
+function gerarLinhasDeResumo(mencoes: MencaoParaCSV[], nomePorLoja: Map<string, string>): string[] {
+  const publicados = mencoes.filter((m) => m.status === "publicado");
+  const limiteDiario = mencoes.filter((m) => m.status === "descartado_limite").length;
+  const erros = mencoes.filter((m) => m.status === "erro").length;
+  const lojasAcionadas = new Set(mencoes.map((m) => m.loja_id)).size;
+
+  const publicadosPorLoja = new Map<string, number>();
+  for (const m of publicados) {
+    publicadosPorLoja.set(m.loja_id, (publicadosPorLoja.get(m.loja_id) ?? 0) + 1);
+  }
+  const ranking = Array.from(publicadosPorLoja.entries())
+    .map(([lojaId, total]) => ({ nome: nomePorLoja.get(lojaId) ?? "Loja removida", total }))
+    .sort((a, b) => b.total - a.total);
+
+  const linhas = [
+    "Resumo do período",
+    `Publicados,${publicados.length}`,
+    `Lojistas acionados,${lojasAcionadas}`,
+    `Limite diário,${limiteDiario}`,
+    `Erro,${erros}`,
+  ];
+
+  if (ranking.length > 0) {
+    linhas.push("", "Publicações por loja no período");
+    for (const linha of ranking) {
+      linhas.push([escaparCampoCSV(linha.nome), String(linha.total)].join(","));
+    }
+  }
+
+  return linhas;
+}
+
 export function gerarCsv(mencoes: MencaoParaCSV[], nomePorLoja: Map<string, string>): string {
+  const resumo = gerarLinhasDeResumo(mencoes, nomePorLoja);
+
   const cabecalho = [
     "Loja",
     "Usuario_que_marcou",
@@ -65,7 +103,7 @@ export function gerarCsv(mencoes: MencaoParaCSV[], nomePorLoja: Map<string, stri
   );
 
   // BOM no início — sem isso o Excel abre acentos quebrados em CSV UTF-8.
-  return "﻿" + [cabecalho.join(","), ...linhas].join("\n");
+  return "﻿" + [...resumo, "", cabecalho.join(","), ...linhas].join("\n");
 }
 
 /**

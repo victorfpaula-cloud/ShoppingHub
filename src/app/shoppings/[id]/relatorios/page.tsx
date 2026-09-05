@@ -1,20 +1,11 @@
 import { criarClienteAdmin } from "@/lib/supabase/admin";
 import { BUCKET_RELATORIOS } from "@/lib/relatorios";
+import { inicioDoDiaBrasiliaISO } from "@/lib/mencoes";
 import { DiaDeMencoesAccordion } from "@/components/DiaDeMencoesAccordion";
 
 export const dynamic = "force-dynamic";
 
 const DIAS_NO_DETALHAMENTO = 30;
-
-const ROTULO_DO_STATUS: Record<string, { texto: string; classe: string }> = {
-  pendente: { texto: "Pendente", classe: "bg-warn/15 text-warn" },
-  publicado: { texto: "Publicado", classe: "bg-ok/15 text-ok" },
-  descartado_limite: {
-    texto: "Limite diário",
-    classe: "bg-white/8 text-neutral-400",
-  },
-  erro: { texto: "Erro", classe: "bg-danger/15 text-danger" },
-};
 
 function formatarDataLonga(iso: string): string {
   return new Intl.DateTimeFormat("pt-BR", {
@@ -50,7 +41,12 @@ type MencaoResumida = {
   recebido_em: string;
 };
 
-const PERIODOS_VALIDOS = [15, 30] as const;
+const OPCOES_DE_PERIODO = [
+  { chave: "hoje", rotulo: "Hoje" },
+  { chave: "15", rotulo: "15 dias" },
+  { chave: "30", rotulo: "30 dias" },
+] as const;
+type ChaveDePeriodo = (typeof OPCOES_DE_PERIODO)[number]["chave"];
 
 export default async function RelatoriosDeMencoesPage({
   params,
@@ -80,37 +76,23 @@ export default async function RelatoriosDeMencoesPage({
 
   const mencoes = (todasAsMencoes ?? []) as MencaoResumida[];
 
-  // ---- Resumo geral (todo o histórico) ----
-  const totalPorStatus = { pendente: 0, publicado: 0, descartado_limite: 0, erro: 0 } as Record<
-    string,
-    number
-  >;
-  for (const m of mencoes) {
-    totalPorStatus[m.status] = (totalPorStatus[m.status] ?? 0) + 1;
-  }
+  // ---- Resumo do período escolhido (cabeçalho com o total publicado, quantos lojistas tiveram
+  // alguma menção nesse período, limite diário e erro, e quanto cada loja publicou) — "Hoje" é o
+  // padrão (pedido em 06/09/2026), usando meia-noite de Brasília como corte, igual ao resto do
+  // painel (ver inicioDoDiaBrasiliaISO em lib/mencoes.ts). ----
+  const chavePeriodo: ChaveDePeriodo = OPCOES_DE_PERIODO.some((o) => o.chave === searchParams.periodo)
+    ? (searchParams.periodo as ChaveDePeriodo)
+    : "hoje";
 
-  // ---- Ranking por loja (publicações confirmadas, todo o histórico) ----
-  const publicadosPorLoja = new Map<string, number>();
-  for (const m of mencoes) {
-    if (m.status === "publicado") {
-      publicadosPorLoja.set(m.loja_id, (publicadosPorLoja.get(m.loja_id) ?? 0) + 1);
-    }
-  }
-  const ranking = Array.from(publicadosPorLoja.entries())
-    .map(([lojaId, total]) => ({ lojaId, nome: nomePorLoja.get(lojaId) ?? "Loja removida", total }))
-    .sort((a, b) => b.total - a.total);
-  const maiorTotalDoRanking = ranking[0]?.total ?? 1;
-
-  // ---- Resumo do período escolhido (pedido em 06/09/2026: um cabeçalho com o total publicado,
-  // quantos lojistas tiveram alguma menção nesse período, e quanto cada um teve) ----
-  const periodoPedido = Number(searchParams.periodo);
-  const diasDoPeriodo = (PERIODOS_VALIDOS as readonly number[]).includes(periodoPedido)
-    ? periodoPedido
-    : 30;
-  const limitePeriodo = new Date(Date.now() - diasDoPeriodo * 24 * 60 * 60 * 1000);
+  const limitePeriodo =
+    chavePeriodo === "hoje"
+      ? new Date(inicioDoDiaBrasiliaISO())
+      : new Date(Date.now() - Number(chavePeriodo) * 24 * 60 * 60 * 1000);
   const mencoesDoPeriodo = mencoes.filter((m) => new Date(m.recebido_em) >= limitePeriodo);
 
   const publicadosNoPeriodo = mencoesDoPeriodo.filter((m) => m.status === "publicado").length;
+  const limiteDiarioNoPeriodo = mencoesDoPeriodo.filter((m) => m.status === "descartado_limite").length;
+  const errosNoPeriodo = mencoesDoPeriodo.filter((m) => m.status === "erro").length;
 
   const publicadosPorLojaNoPeriodo = new Map<string, number>();
   for (const m of mencoesDoPeriodo) {
@@ -190,23 +172,23 @@ export default async function RelatoriosDeMencoesPage({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h3 className="text-[13.5px] font-bold text-neutral-200">Resumo do período</h3>
           <div className="flex shrink-0 items-center gap-1.5 rounded-full border border-white/10 p-1">
-            {PERIODOS_VALIDOS.map((dias) => (
+            {OPCOES_DE_PERIODO.map((opcao) => (
               <a
-                key={dias}
-                href={`?periodo=${dias}`}
+                key={opcao.chave}
+                href={`?periodo=${opcao.chave}`}
                 className={`rounded-full px-3 py-1 text-[11.5px] font-bold transition ${
-                  diasDoPeriodo === dias
+                  chavePeriodo === opcao.chave
                     ? "bg-accent text-white"
                     : "text-neutral-400 hover:text-neutral-200"
                 }`}
               >
-                {dias} dias
+                {opcao.rotulo}
               </a>
             ))}
           </div>
         </div>
 
-        <div className="mt-4 grid grid-cols-2 gap-3">
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <div className="rounded-xl border border-white/8 bg-ink-850 p-4">
             <p className="text-[11px] font-semibold text-neutral-400">Publicados no período</p>
             <p className="font-display mt-1.5 text-2xl font-bold text-ok">{publicadosNoPeriodo}</p>
@@ -214,6 +196,14 @@ export default async function RelatoriosDeMencoesPage({
           <div className="rounded-xl border border-white/8 bg-ink-850 p-4">
             <p className="text-[11px] font-semibold text-neutral-400">Lojistas acionados</p>
             <p className="font-display mt-1.5 text-2xl font-bold">{lojasAcionadasNoPeriodo}</p>
+          </div>
+          <div className="rounded-xl border border-white/8 bg-ink-850 p-4">
+            <p className="text-[11px] font-semibold text-neutral-400">Limite diário</p>
+            <p className="font-display mt-1.5 text-2xl font-bold text-neutral-300">{limiteDiarioNoPeriodo}</p>
+          </div>
+          <div className="rounded-xl border border-white/8 bg-ink-850 p-4">
+            <p className="text-[11px] font-semibold text-neutral-400">Erro</p>
+            <p className="font-display mt-1.5 text-2xl font-bold text-danger">{errosNoPeriodo}</p>
           </div>
         </div>
 
@@ -236,44 +226,7 @@ export default async function RelatoriosDeMencoesPage({
 
           {rankingDoPeriodo.length === 0 && (
             <p className="rounded-xl border border-dashed border-white/12 px-4 py-5 text-center text-sm text-neutral-400">
-              Nenhuma Story publicada nos últimos {diasDoPeriodo} dias.
-            </p>
-          )}
-        </div>
-      </div>
-
-      {/* Resumo geral */}
-      <div className="mt-9 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {(Object.keys(ROTULO_DO_STATUS) as Array<keyof typeof ROTULO_DO_STATUS>).map((status) => (
-          <div key={status} className="rounded-2xl border border-white/8 bg-ink-900 p-4">
-            <p className="text-[11px] font-semibold text-neutral-400">{ROTULO_DO_STATUS[status].texto}</p>
-            <p className="font-display mt-2 text-2xl font-bold">{totalPorStatus[status] ?? 0}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* Ranking por loja */}
-      <div className="mt-9">
-        <h3 className="text-[13.5px] font-bold text-neutral-200">Publicações por loja (histórico completo)</h3>
-        <div className="mt-3.5 flex flex-col gap-2.5">
-          {ranking.map((linha) => (
-            <div key={linha.lojaId} className="flex items-center gap-3">
-              <span className="w-32 shrink-0 truncate text-[13px] font-medium text-neutral-300">{linha.nome}</span>
-              <div className="h-2 flex-1 overflow-hidden rounded-full bg-ink-850">
-                <div
-                  className="h-full rounded-full bg-accent"
-                  style={{ width: `${Math.max(4, (linha.total / maiorTotalDoRanking) * 100)}%` }}
-                />
-              </div>
-              <span className="w-6 shrink-0 text-right text-[13px] font-bold text-neutral-200">
-                {linha.total}
-              </span>
-            </div>
-          ))}
-
-          {ranking.length === 0 && (
-            <p className="rounded-2xl border border-dashed border-white/12 px-4 py-6 text-center text-sm text-neutral-400">
-              Nenhuma Story publicada ainda.
+              Nenhuma Story publicada nesse período.
             </p>
           )}
         </div>
