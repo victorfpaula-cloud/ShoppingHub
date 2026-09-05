@@ -1,0 +1,28 @@
+name: Publicar menções pendentes
+
+# Substitui os crons fixos de meio-dia/18h da Vercel (plano Hobby só permite crons 1x por dia) —
+# roda de 5 em 5 minutos, batendo no mesmo endpoint que já processa "o que tiver pendente" hoje.
+# Efeito prático: a menção de Story sai poucos minutos depois do lojista marcar o shopping, em vez
+# de esperar até o próximo horário fixo (até 12h de diferença antes). `workflow_dispatch` permite
+# disparar manualmente pela aba Actions do GitHub, sem precisar abrir o dashboard da Vercel.
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Chamar /api/cron/publicar-mencoes
+        run: |
+          resposta=$(curl -sS -o /tmp/resposta.json -w "%{http_code}" --max-time 65 \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "https://shoppinghub-hazel.vercel.app/api/cron/publicar-mencoes")
+          echo "Status HTTP: $resposta"
+          cat /tmp/resposta.json
+          echo
+          if [ "$resposta" -ge 400 ]; then
+            echo "Falha ao chamar o endpoint (status $resposta)."
+            exit 1
+          fi

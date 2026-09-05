@@ -29,59 +29,6 @@ export function inicioDoDiaBrasiliaISO(agora: Date = new Date()): string {
   return new Date(meiaNoiteEmBrasilia + OFFSET_BRASILIA_HORAS * 60 * 60 * 1000).toISOString();
 }
 
-// Horários de publicação automática (cron, ver vercel.json): meio-dia e 18h, horário de Brasília.
-const HORAS_DE_PUBLICACAO_BRASILIA = [12, 18];
-
-/**
- * Todos os horários de publicação (meio-dia e 18h) de ontem, hoje e amanhã, como instantes UTC —
- * base pra achar "o último que já passou" (início do ciclo atual) ou "o próximo" (usada pelas duas
- * funções abaixo).
- */
-function horariosDePublicacaoBrasilia(agora: Date): number[] {
-  const OFFSET_BRASILIA_HORAS = 3;
-  const agoraEmBrasilia = new Date(agora.getTime() - OFFSET_BRASILIA_HORAS * 60 * 60 * 1000);
-
-  const candidatos: number[] = [];
-  for (const diasDeOffset of [-1, 0, 1]) {
-    for (const hora of HORAS_DE_PUBLICACAO_BRASILIA) {
-      const instanteEmBrasilia = Date.UTC(
-        agoraEmBrasilia.getUTCFullYear(),
-        agoraEmBrasilia.getUTCMonth(),
-        agoraEmBrasilia.getUTCDate() + diasDeOffset,
-        hora,
-        0,
-        0
-      );
-      candidatos.push(instanteEmBrasilia + OFFSET_BRASILIA_HORAS * 60 * 60 * 1000);
-    }
-  }
-
-  return candidatos.sort((a, b) => a - b);
-}
-
-/**
- * Início do CICLO DE PUBLICAÇÃO atual (o último horário de cron que já passou) — usado em vez de
- * "meia-noite" pra contar menções "aguardando publicar". Diferença importante: uma menção recebida
- * às 22h30 (depois do cron das 18h) continua contando a noite inteira, até publicar de verdade no
- * cron do meio-dia seguinte — com meia-noite como corte, ela "sumia" da contagem ao virar o dia,
- * mesmo sem ter sido publicada ainda (bug relatado em 05/09/2026).
- */
-export function inicioDoCicloDePublicacaoISO(agora: Date = new Date()): string {
-  const horarios = horariosDePublicacaoBrasilia(agora);
-  const jaPassaram = horarios.filter((h) => h <= agora.getTime());
-  return new Date(jaPassaram[jaPassaram.length - 1]).toISOString();
-}
-
-/**
- * Próximo horário de publicação (o próximo cron que ainda vai rodar) — usado só pra deixar a
- * interface clara ("próxima publicação às HH:mm"), sem nenhum efeito na contagem em si.
- */
-export function proximaPublicacaoISO(agora: Date = new Date()): string {
-  const horarios = horariosDePublicacaoBrasilia(agora);
-  const aindaVaoRodar = horarios.filter((h) => h > agora.getTime());
-  return new Date(aindaVaoRodar[0]).toISOString();
-}
-
 function extensaoPorContentType(contentType: string): string {
   if (contentType.includes("video")) return "mp4";
   if (contentType.includes("png")) return "png";
