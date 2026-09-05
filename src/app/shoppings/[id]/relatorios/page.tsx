@@ -50,7 +50,15 @@ type MencaoResumida = {
   recebido_em: string;
 };
 
-export default async function RelatoriosDeMencoesPage({ params }: { params: { id: string } }) {
+const PERIODOS_VALIDOS = [15, 30] as const;
+
+export default async function RelatoriosDeMencoesPage({
+  params,
+  searchParams,
+}: {
+  params: { id: string };
+  searchParams: { periodo?: string };
+}) {
   const admin = criarClienteAdmin();
 
   const { data: lojas } = await admin
@@ -92,6 +100,31 @@ export default async function RelatoriosDeMencoesPage({ params }: { params: { id
     .map(([lojaId, total]) => ({ lojaId, nome: nomePorLoja.get(lojaId) ?? "Loja removida", total }))
     .sort((a, b) => b.total - a.total);
   const maiorTotalDoRanking = ranking[0]?.total ?? 1;
+
+  // ---- Resumo do período escolhido (pedido em 06/09/2026: um cabeçalho com o total publicado,
+  // quantos lojistas tiveram alguma menção nesse período, e quanto cada um teve) ----
+  const periodoPedido = Number(searchParams.periodo);
+  const diasDoPeriodo = (PERIODOS_VALIDOS as readonly number[]).includes(periodoPedido)
+    ? periodoPedido
+    : 30;
+  const limitePeriodo = new Date(Date.now() - diasDoPeriodo * 24 * 60 * 60 * 1000);
+  const mencoesDoPeriodo = mencoes.filter((m) => new Date(m.recebido_em) >= limitePeriodo);
+
+  const publicadosNoPeriodo = mencoesDoPeriodo.filter((m) => m.status === "publicado").length;
+
+  const publicadosPorLojaNoPeriodo = new Map<string, number>();
+  for (const m of mencoesDoPeriodo) {
+    if (m.status !== "publicado") continue;
+    publicadosPorLojaNoPeriodo.set(m.loja_id, (publicadosPorLojaNoPeriodo.get(m.loja_id) ?? 0) + 1);
+  }
+  // "Acionado" conta qualquer menção recebida no período (não só as publicadas) — mostra o
+  // lojista que usou a marcação, mesmo que a publicação tenha caído em erro ou limite diário.
+  const lojasAcionadasNoPeriodo = new Set(mencoesDoPeriodo.map((m) => m.loja_id)).size;
+
+  const rankingDoPeriodo = Array.from(publicadosPorLojaNoPeriodo.entries())
+    .map(([lojaId, total]) => ({ lojaId, nome: nomePorLoja.get(lojaId) ?? "Loja removida", total }))
+    .sort((a, b) => b.total - a.total);
+  const maiorTotalDoPeriodo = rankingDoPeriodo[0]?.total ?? 1;
 
   // ---- Detalhamento diário (últimos 30 dias) ----
   const limiteDetalhamento = new Date(Date.now() - DIAS_NO_DETALHAMENTO * 24 * 60 * 60 * 1000);
@@ -152,8 +185,65 @@ export default async function RelatoriosDeMencoesPage({ params }: { params: { id
         </div>
       </div>
 
+      {/* Resumo do período escolhido */}
+      <div className="mt-7 rounded-2xl border border-white/8 bg-ink-900 p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h3 className="text-[13.5px] font-bold text-neutral-200">Resumo do período</h3>
+          <div className="flex shrink-0 items-center gap-1.5 rounded-full border border-white/10 p-1">
+            {PERIODOS_VALIDOS.map((dias) => (
+              <a
+                key={dias}
+                href={`?periodo=${dias}`}
+                className={`rounded-full px-3 py-1 text-[11.5px] font-bold transition ${
+                  diasDoPeriodo === dias
+                    ? "bg-accent text-white"
+                    : "text-neutral-400 hover:text-neutral-200"
+                }`}
+              >
+                {dias} dias
+              </a>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-4 grid grid-cols-2 gap-3">
+          <div className="rounded-xl border border-white/8 bg-ink-850 p-4">
+            <p className="text-[11px] font-semibold text-neutral-400">Publicados no período</p>
+            <p className="font-display mt-1.5 text-2xl font-bold text-ok">{publicadosNoPeriodo}</p>
+          </div>
+          <div className="rounded-xl border border-white/8 bg-ink-850 p-4">
+            <p className="text-[11px] font-semibold text-neutral-400">Lojistas acionados</p>
+            <p className="font-display mt-1.5 text-2xl font-bold">{lojasAcionadasNoPeriodo}</p>
+          </div>
+        </div>
+
+        <h4 className="mt-5 text-[12px] font-bold text-neutral-400">Publicações por loja no período</h4>
+        <div className="mt-3 flex flex-col gap-2.5">
+          {rankingDoPeriodo.map((linha) => (
+            <div key={linha.lojaId} className="flex items-center gap-3">
+              <span className="w-32 shrink-0 truncate text-[13px] font-medium text-neutral-300">{linha.nome}</span>
+              <div className="h-2 flex-1 overflow-hidden rounded-full bg-ink-850">
+                <div
+                  className="h-full rounded-full bg-accent"
+                  style={{ width: `${Math.max(4, (linha.total / maiorTotalDoPeriodo) * 100)}%` }}
+                />
+              </div>
+              <span className="w-36 shrink-0 whitespace-nowrap text-right text-[12px] font-semibold text-neutral-400">
+                {linha.total} stor{linha.total === 1 ? "y" : "ies"} no período
+              </span>
+            </div>
+          ))}
+
+          {rankingDoPeriodo.length === 0 && (
+            <p className="rounded-xl border border-dashed border-white/12 px-4 py-5 text-center text-sm text-neutral-400">
+              Nenhuma Story publicada nos últimos {diasDoPeriodo} dias.
+            </p>
+          )}
+        </div>
+      </div>
+
       {/* Resumo geral */}
-      <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="mt-9 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {(Object.keys(ROTULO_DO_STATUS) as Array<keyof typeof ROTULO_DO_STATUS>).map((status) => (
           <div key={status} className="rounded-2xl border border-white/8 bg-ink-900 p-4">
             <p className="text-[11px] font-semibold text-neutral-400">{ROTULO_DO_STATUS[status].texto}</p>
