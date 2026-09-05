@@ -44,7 +44,9 @@ export default async function FilaDeMencoesPage({
     idsDasLojas.length > 0
       ? await admin
           .from("shoppinghub_mencoes")
-          .select("id, loja_id, status, recebido_em, publicado_em, story_media_id, storage_path")
+          .select(
+            "id, loja_id, status, recebido_em, publicado_em, story_media_id, storage_path, tentativas"
+          )
           .in("loja_id", idsDasLojas)
           .order("recebido_em", { ascending: false })
           .limit(100)
@@ -62,8 +64,9 @@ export default async function FilaDeMencoesPage({
     <div>
       <h2 className="text-lg font-semibold">Fila de menções de Stories</h2>
       <p className="mt-1 text-sm text-neutral-400">
-        A publicação é automática pelo cron, duas vezes por dia — não tem botão de aprovar, só de
-        excluir (caso precise tirar uma menção indevida ou um teste antes de ser publicado).
+        A publicação é automática, a cada poucos minutos — não tem botão de aprovar. Uma menção com
+        erro tenta de novo sozinha algumas vezes antes de precisar de ação manual (tentar de novo ou
+        excluir).
       </p>
 
       {searchParams.erro && (
@@ -134,18 +137,37 @@ export default async function FilaDeMencoesPage({
                 <p className="mt-0.5 text-xs text-neutral-500">
                   Recebida em {formatarDataHora(mencao.recebido_em)}
                   {mencao.publicado_em && ` — publicada em ${formatarDataHora(mencao.publicado_em)}`}
+                  {mencao.status === "erro" &&
+                    mencao.tentativas > 0 &&
+                    ` — ${mencao.tentativas} tentativa${mencao.tentativas > 1 ? "s" : ""} sozinha${
+                      mencao.tentativas > 1 ? "s" : ""
+                    }`}
                 </p>
               </div>
 
-              <form action={`/api/mencoes/${mencao.id}/excluir`} method="POST">
-                <input type="hidden" name="shopping_id" value={params.id} />
-                <button
-                  type="submit"
-                  className="shrink-0 rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs font-medium text-neutral-500 hover:border-red-900 hover:bg-red-950/40 hover:text-red-400"
-                >
-                  Excluir
-                </button>
-              </form>
+              <div className="flex shrink-0 items-center gap-2">
+                {mencao.status === "erro" && (
+                  <form action={`/api/mencoes/${mencao.id}/tentar-novamente`} method="POST">
+                    <input type="hidden" name="shopping_id" value={params.id} />
+                    <button
+                      type="submit"
+                      className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs font-medium text-neutral-400 hover:border-sky-900 hover:bg-sky-950/40 hover:text-sky-300"
+                    >
+                      Tentar novamente
+                    </button>
+                  </form>
+                )}
+
+                <form action={`/api/mencoes/${mencao.id}/excluir`} method="POST">
+                  <input type="hidden" name="shopping_id" value={params.id} />
+                  <button
+                    type="submit"
+                    className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs font-medium text-neutral-500 hover:border-red-900 hover:bg-red-950/40 hover:text-red-400"
+                  >
+                    Excluir
+                  </button>
+                </form>
+              </div>
             </div>
           );
         })}

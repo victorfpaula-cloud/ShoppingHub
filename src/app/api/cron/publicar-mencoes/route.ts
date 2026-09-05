@@ -8,14 +8,15 @@ import { exportarRelatoriosDevidos } from "@/lib/relatorios";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-// Chamado pela Vercel duas vezes por dia (ver vercel.json — 15h e 21h UTC = 12h e 18h em
-// Brasília). Publica cada menção de Story pendente como Story da conta do shopping e grava o ID
-// retornado, que depois serve pra rotear a resposta do cliente pra loja certa
+// Chamado de 5 em 5 minutos pelo GitHub Actions (ver .github/workflows/publicar-mencoes.yml) —
+// não mais pelo cron da própria Vercel, que no plano Hobby só permite 1x por dia por schedule.
+// Publica cada menção de Story pendente como Story da conta do shopping e grava o ID retornado,
+// que depois serve pra rotear a resposta do cliente pra loja certa
 // (src/app/api/webhook/instagram/route.ts, caso "reply_to.story.id").
 //
-// Protegido por CRON_SECRET — a Vercel manda esse valor automaticamente no header
-// "Authorization: Bearer" das chamadas de cron; sem o valor certo, ninguém mais consegue disparar
-// a publicação manualmente batendo na URL.
+// Protegido por CRON_SECRET, enviado como "Authorization: Bearer" pelo workflow do GitHub (guardado
+// como Secret do repositório) — sem o valor certo, ninguém mais consegue disparar a publicação
+// manualmente batendo na URL.
 export async function GET(request: NextRequest) {
   const cronSecret = process.env.CRON_SECRET;
   const autorizacao = request.headers.get("authorization");
@@ -28,7 +29,7 @@ export async function GET(request: NextRequest) {
 
   const { data: mencoesPendentes, error } = await admin
     .from("shoppinghub_mencoes")
-    .select("id, conta_id, loja_id, storage_path, instagram_username")
+    .select("id, conta_id, loja_id, storage_path, instagram_username, tentativas")
     .eq("status", "pendente")
     .not("storage_path", "is", null)
     .order("recebido_em", { ascending: true });
@@ -62,11 +63,17 @@ export async function GET(request: NextRequest) {
   // "grande" por execução — isso é físico: um vídeo sozinho já pode gastar quase todo o orçamento
   // de 60s que a Vercel permite no plano Hobby, não dá pra caber dois com segurança na mesma
   // chamada. Múltiplos vídeos na fila continuam saindo, só que em execuções seguintes (o cron
-  // automático roda 2x por dia, ou clique em "Run" de novo pra não esperar).
+  // automático roda de 5 em 5 minutos, então a espera real é curta).
   const inicioDaExecucao = Date.now();
   const TEMPO_TOTAL_DISPONIVEL_MS = 55_000; // um pouco abaixo dos 60s da Vercel, sobra pra limpeza/exportação do final
   const PRAZO_MS_VIDEO = 48_000;
   const PRAZO_MS_IMAGEM = 15_000;
+
+  // Quantas vezes tenta sozinho antes de desistir e deixar em "erro" pra ação manual (botão de
+  // "Tentar novamente" ou "Excluir" na Fila de Menções) — com o cron rodando de 5 em 5 minutos,
+  // isso já cobre falha passageira (rede, instabilidade momentânea da Meta) sem martelar pra
+  // sempre um item permanentemente quebrado (conta desativada, mídia inválida etc.).
+  const MAX_TENTATIVAS_AUTOMATICAS = 3;
 
   for (const mencao of mencoesPendentes ?? []) {
     const prazoDoItem = mencao.storage_path?.endsWith(".mp4") ? PRAZO_MS_VIDEO : PRAZO_MS_IMAGEM;
@@ -81,14 +88,19 @@ export async function GET(request: NextRequest) {
       resultado.publicadas += 1;
     } catch (erro) {
       console.error(`Falha ao publicar menção ${mencao.id}:`, erro);
-      await admin.from("shoppinghub_mencoes").update({ status: "erro" }).eq("id", mencao.id);
+      const tentativas = mencao.tentativas + 1;
+      const novoStatus = tentativas < MAX_TENTATIVAS_AUTOMATICAS ? "pendente" : "erro";
+      await admin
+        .from("shoppinghub_mencoes")
+        .update({ status: novoStatus, tentativas })
+        .eq("id", mencao.id);
       resultado.falhas += 1;
     }
   }
 
-  // Aproveita esse mesmo cron (já roda duas vezes por dia) pra também limpar mensagens antigas do
-  // histórico de atendimento e gerar a exportação mensal de relatórios — evita criar mais crons só
-  // pra isso (o plano Hobby da Vercel só permite 2).
+  // Aproveita essa mesma chamada (já roda de 5 em 5 minutos) pra também limpar mensagens antigas
+  // do histórico de atendimento e gerar a exportação mensal de relatórios — evita precisar de mais
+  // um agendamento só pra isso.
   const mensagensApagadas = await limparMensagensAntigas(admin);
   const exportacoesGeradas = await exportarRelatoriosDevidos(admin);
 
