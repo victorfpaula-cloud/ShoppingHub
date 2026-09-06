@@ -1,10 +1,21 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { gerarCsvDeAtendimentos } from "./atendimentos";
+import { enviarEmailComAnexos } from "./email";
 
 // Bucket PRIVADO — diferente do shoppinghub-mencoes (que precisa ser público pra Meta baixar a
 // mídia), os relatórios só são acessados de dentro do painel autenticado, via URL assinada.
 export const BUCKET_RELATORIOS = "shoppinghub-relatorios";
 
 const DIAS_ENTRE_EXPORTACOES = 30;
+
+// Pedido em 06/09/2026: a cada ciclo de exportação automática, além de salvar o CSV de menções no
+// Storage (como já acontecia), manda os dois relatórios (menções/Stories e atendimentos) por
+// e-mail — dono do ShoppingHub, sem precisar entrar no painel.
+const EMAIL_DESTINO_DOS_RELATORIOS = "victorfpaula@gmail.com";
+
+function formatarDataCurtaEmail(data: Date): string {
+  return new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo" }).format(data);
+}
 
 const ROTULO_DO_STATUS: Record<string, string> = {
   pendente: "Pendente",
@@ -153,6 +164,12 @@ async function gerarExportacao(
   periodoInicio: Date,
   periodoFim: Date
 ): Promise<void> {
+  const { data: shopping } = await admin
+    .from("shoppinghub_shoppings")
+    .select("nome")
+    .eq("id", shoppingId)
+    .maybeSingle();
+
   const { data: lojas } = await admin
     .from("shoppinghub_lojas")
     .select("id, nome")
@@ -201,4 +218,29 @@ async function gerarExportacao(
   if (erroAoRegistrar) {
     throw new Error(`Falha ao registrar exportação de relatório: ${erroAoRegistrar.message}`);
   }
+
+  // E-mail é "melhor esforço" — se falhar, só loga (ver enviarEmailComAnexos): o CSV de menções já
+  // está salvo e registrado acima, então essa exportação não deve ser tentada de novo por causa
+  // disso. O CSV de atendimentos NÃO é salvo no Storage (só vai anexado no e-mail) — não tem uma
+  // tabela de "exportações de atendimento" nem falta fazer uma só pra isso.
+  const csvDeAtendimentos = await gerarCsvDeAtendimentos(admin, shoppingId, periodoInicio, periodoFim);
+  const nomeDoShopping = shopping?.nome ?? "Shopping";
+  const periodoFormatado = `${formatarDataCurtaEmail(periodoInicio)} a ${formatarDataCurtaEmail(periodoFim)}`;
+
+  await enviarEmailComAnexos({
+    destinatario: EMAIL_DESTINO_DOS_RELATORIOS,
+    assunto: `Relatórios ShoppingHub — ${nomeDoShopping} (${periodoFormatado})`,
+    corpoHtml: `
+      <p>Relatórios automáticos de <strong>${nomeDoShopping}</strong>, período de ${periodoFormatado}:</p>
+      <ul>
+        <li>Menções de Story recebidas e republicadas (${mencoes?.length ?? 0} no total)</li>
+        <li>Atendimentos feitos pela IA</li>
+      </ul>
+      <p>Os dois vão em anexo, em CSV.</p>
+    `,
+    anexos: [
+      { nomeArquivo: `mencoes_${nomeArquivo}`, conteudoCSV: csv },
+      { nomeArquivo: `atendimentos_${nomeArquivo}`, conteudoCSV: csvDeAtendimentos },
+    ],
+  });
 }
