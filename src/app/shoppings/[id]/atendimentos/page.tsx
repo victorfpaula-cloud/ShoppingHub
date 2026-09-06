@@ -93,12 +93,30 @@ export default async function AtendimentosPage({ params }: { params: { id: strin
 
   return (
     <div>
-      <h1 className="font-display text-[22px] font-bold tracking-tight">Atendimentos</h1>
-      <p className="mt-2 max-w-2xl text-[13px] text-neutral-400">
-        Um card por cliente atendido pela IA — clica pra expandir e ver a conversa inteira. O
-        histórico de mensagens fica guardado por {diasDeRetencaoDeMensagens()} dias e depois é
-        apagado automaticamente.
-      </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="font-display text-[22px] font-bold tracking-tight">Atendimentos</h1>
+          <p className="mt-2 max-w-2xl text-[13px] text-neutral-400">
+            Um card por cliente atendido pela IA — clica pra expandir e ver a conversa inteira. O
+            histórico de mensagens fica guardado por {diasDeRetencaoDeMensagens()} dias e depois é
+            apagado automaticamente.
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <a
+            href={`/api/shoppings/${params.id}/atendimentos/exportar?dias=15`}
+            className="rounded-[9px] border border-white/14 px-3.5 py-2 text-xs font-semibold text-neutral-200 hover:bg-white/5"
+          >
+            Exportar últimos 15 dias
+          </a>
+          <a
+            href={`/api/shoppings/${params.id}/atendimentos/exportar?dias=30`}
+            className="rounded-[9px] border border-white/14 px-3.5 py-2 text-xs font-semibold text-neutral-200 hover:bg-white/5"
+          >
+            Exportar últimos 30 dias
+          </a>
+        </div>
+      </div>
 
       <div className="mt-6 flex flex-col gap-2.5">
         {atendimentos.map((atendimento) => (

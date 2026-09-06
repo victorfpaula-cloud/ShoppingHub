@@ -25,7 +25,7 @@ function formatarDataHoraCSV(iso: string | null): string {
   }).format(new Date(iso));
 }
 
-function escaparCampoCSV(valor: string): string {
+export function escaparCampoCSV(valor: string): string {
   if (/[",\n]/.test(valor)) {
     return `"${valor.replace(/"/g, '""')}"`;
   }

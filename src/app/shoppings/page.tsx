@@ -47,28 +47,6 @@ export default async function ShoppingsPage({
           Atendimento virtual — cada shopping tem suas próprias lojas e base de conhecimento.
         </p>
 
-        <a
-          href="/relatorios"
-          className="mt-6 flex items-center justify-between gap-3 rounded-2xl border border-white/8 bg-gradient-to-b from-ink-900 to-ink-850 px-6 py-5 transition hover:-translate-y-0.5"
-        >
-          <div className="flex items-center gap-3.5">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[11px] bg-accent/15 text-accent-strong">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-                <path d="M4 20V10M12 20V4M20 20v-7" />
-              </svg>
-            </div>
-            <div>
-              <p className="text-[14px] font-bold text-neutral-100">Relatório de atendimentos</p>
-              <p className="mt-0.5 text-xs text-neutral-400">Filtra por shopping e mês, e exporta em PDF</p>
-            </div>
-          </div>
-          <span className="shrink-0 text-neutral-600">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 18l6-6-6-6" />
-            </svg>
-          </span>
-        </a>
-
         {searchParams.criado && (
           <div className="mt-4 rounded-xl border border-ok/25 bg-ok/10 px-4 py-2.5 text-sm text-ok">
             Shopping criado, com a loja &quot;Geral&quot; já cadastrada.
