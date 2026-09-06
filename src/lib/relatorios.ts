@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buscarResumoDeAtendimentos } from "./atendimentos";
 import { enviarEmailComAnexos } from "./email";
-import { gerarPdfDeMencoes, gerarPdfDeAtendimentos } from "./pdfRelatorio";
+import { gerarPdfDeMencoes, gerarPdfDeAtendimentos, type LinhaDeDetalheDeMencao } from "./pdfRelatorio";
 
 const DIAS_ENTRE_EXPORTACOES = 30;
 
@@ -188,11 +188,19 @@ export async function enviarRelatorioDeMencoesPorEmail(
 
   const { mencoes, nomePorLoja } = await buscarMencoesDoPeriodo(admin, shoppingId, periodoInicio, periodoFim);
   const resumo = calcularResumoDeMencoes(mencoes, nomePorLoja);
+  const detalhes: LinhaDeDetalheDeMencao[] = mencoes.map((m) => ({
+    loja: nomePorLoja.get(m.loja_id) ?? "Loja removida",
+    usuario: m.instagram_username,
+    recebidoEm: m.recebido_em,
+    publicadoEm: m.publicado_em,
+    status: m.status,
+  }));
 
   const pdf = await gerarPdfDeMencoes({
     shoppingNome: nomeDoShopping,
     periodoTexto: periodoFormatado,
     ...resumo,
+    detalhes,
   });
 
   return enviarEmailComAnexos({

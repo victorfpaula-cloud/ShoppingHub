@@ -43,6 +43,31 @@ function carregarLogo(): Promise<Buffer> {
 
 export type CartaoDeEstatistica = { rotulo: string; valor: string | number; cor: string };
 export type LinhaDeRanking = { nome: string; total: number };
+export type LinhaDeDetalheDeMencao = {
+  loja: string;
+  usuario: string | null;
+  recebidoEm: string;
+  publicadoEm: string | null;
+  status: string;
+};
+
+const ROTULO_DO_STATUS_PDF: Record<string, { texto: string; cor: string }> = {
+  pendente: { texto: "Pendente", cor: "#f59e0b" },
+  publicado: { texto: "Publicado", cor: "#059669" },
+  descartado_limite: { texto: "Limite diário", cor: "#9ca3af" },
+  erro: { texto: "Erro", cor: "#dc2626" },
+};
+
+function formatarDataHoraTabela(iso: string | null): string {
+  if (!iso) return "—";
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(iso));
+}
 
 async function desenharCabecalho(
   doc: Documento,
@@ -165,6 +190,114 @@ function desenharRanking(
   return cursor + 12;
 }
 
+// Colunas da tabela detalhada — larguras somam a largura útil da página (A4, margem de 40pt de
+// cada lado). Reaproveitadas tanto no cabeçalho quanto em cada linha, e redesenhadas no topo de
+// cada página nova (ver desenharTabelaDeMencoes).
+function colunasDaTabelaDeMencoes(larguraUtil: number) {
+  const larguraLoja = 130;
+  const larguraUsuario = 110;
+  const larguraData = 88;
+  return [
+    { titulo: "Loja", largura: larguraLoja },
+    { titulo: "@usuário", largura: larguraUsuario },
+    { titulo: "Marcado em", largura: larguraData },
+    { titulo: "Publicado em", largura: larguraData },
+    { titulo: "Status", largura: larguraUtil - larguraLoja - larguraUsuario - larguraData * 2 },
+  ];
+}
+
+function desenharCabecalhoDeColunas(
+  doc: Documento,
+  y: number,
+  colunas: ReturnType<typeof colunasDaTabelaDeMencoes>,
+  larguraUtil: number
+): number {
+  let x = MARGEM;
+  doc.fillColor(COR_TEXTO_SECUNDARIO).font("Helvetica-Bold").fontSize(8);
+  for (const coluna of colunas) {
+    doc.text(coluna.titulo.toUpperCase(), x, y, { width: coluna.largura - 6, lineBreak: false });
+    x += coluna.largura;
+  }
+  const yLinha = y + 12;
+  doc.moveTo(MARGEM, yLinha).lineTo(MARGEM + larguraUtil, yLinha).strokeColor("#e5e7eb").lineWidth(1).stroke();
+  return yLinha + 10;
+}
+
+/**
+ * Tabela linha a linha (uma por menção) — o detalhamento que tinha sumido quando o relatório virou
+ * PDF (pedido de volta em 06/09/2026): loja, @usuário, horário em que a Story marcou o lojista,
+ * horário em que foi republicada, e status. Pagina sozinha (repete o cabeçalho das colunas em cada
+ * página nova) porque um período de 30 dias facilmente passa de uma página de menções.
+ */
+function desenharTabelaDeMencoes(doc: Documento, y: number, titulo: string, linhas: LinhaDeDetalheDeMencao[]): number {
+  doc.fillColor(COR_TEXTO_PRINCIPAL).font("Helvetica-Bold").fontSize(12).text(titulo, MARGEM, y, { lineBreak: false });
+  let cursor = y + 24;
+
+  if (linhas.length === 0) {
+    doc
+      .fillColor(COR_TEXTO_SECUNDARIO)
+      .font("Helvetica")
+      .fontSize(10)
+      .text("Nenhum registro nesse período.", MARGEM, cursor, { lineBreak: false });
+    return cursor + 24;
+  }
+
+  const larguraUtil = doc.page.width - MARGEM * 2;
+  const colunas = colunasDaTabelaDeMencoes(larguraUtil);
+  const ALTURA_LINHA = 18;
+  const LIMITE_INFERIOR = doc.page.height - 50;
+
+  cursor = desenharCabecalhoDeColunas(doc, cursor, colunas, larguraUtil);
+
+  linhas.forEach((linha, indice) => {
+    if (cursor + ALTURA_LINHA > LIMITE_INFERIOR) {
+      doc.addPage();
+      cursor = desenharCabecalhoDeColunas(doc, MARGEM, colunas, larguraUtil);
+    }
+
+    if (indice % 2 === 1) {
+      doc.rect(MARGEM, cursor - 3, larguraUtil, ALTURA_LINHA).fill("#f9fafb");
+    }
+
+    let x = MARGEM;
+    doc
+      .fillColor(COR_TEXTO_TERCIARIO)
+      .font("Helvetica")
+      .fontSize(8.5)
+      .text(linha.loja, x, cursor, { width: colunas[0].largura - 6, height: 12, ellipsis: true, lineBreak: false });
+    x += colunas[0].largura;
+
+    doc
+      .fillColor(COR_TEXTO_SECUNDARIO)
+      .text(linha.usuario ? `@${linha.usuario}` : "—", x, cursor, {
+        width: colunas[1].largura - 6,
+        height: 12,
+        ellipsis: true,
+        lineBreak: false,
+      });
+    x += colunas[1].largura;
+
+    doc
+      .fillColor(COR_TEXTO_TERCIARIO)
+      .text(formatarDataHoraTabela(linha.recebidoEm), x, cursor, { width: colunas[2].largura - 6, lineBreak: false });
+    x += colunas[2].largura;
+
+    doc.text(formatarDataHoraTabela(linha.publicadoEm), x, cursor, { width: colunas[3].largura - 6, lineBreak: false });
+    x += colunas[3].largura;
+
+    const rotulo = ROTULO_DO_STATUS_PDF[linha.status] ?? { texto: linha.status, cor: "#9ca3af" };
+    doc.circle(x + 3, cursor + 4, 3).fill(rotulo.cor);
+    doc
+      .fillColor(COR_TEXTO_TERCIARIO)
+      .font("Helvetica-Bold")
+      .text(rotulo.texto, x + 12, cursor, { width: colunas[4].largura - 12, lineBreak: false });
+
+    cursor += ALTURA_LINHA;
+  });
+
+  return cursor + 16;
+}
+
 function desenharRodape(doc: Documento) {
   const y = doc.page.height - 40;
   const larguraUtil = doc.page.width - MARGEM * 2;
@@ -203,6 +336,7 @@ export async function gerarPdfDeMencoes(opts: {
   limiteDiario: number;
   erros: number;
   ranking: LinhaDeRanking[];
+  detalhes: LinhaDeDetalheDeMencao[];
 }): Promise<Buffer> {
   const doc = new PDFDocument({ size: "A4", margin: 0, bufferPages: true });
 
@@ -219,7 +353,8 @@ export async function gerarPdfDeMencoes(opts: {
     { rotulo: "Erro", valor: opts.erros, cor: "#f87171" },
   ]);
 
-  desenharRanking(doc, y, "Publicações por loja no período", opts.ranking, (n) => `${n} stor${n === 1 ? "y" : "ies"}`);
+  y = desenharRanking(doc, y, "Publicações por loja no período", opts.ranking, (n) => `${n} stor${n === 1 ? "y" : "ies"}`);
+  desenharTabelaDeMencoes(doc, y, "Detalhamento — todas as menções do período", opts.detalhes);
   desenharRodape(doc);
 
   return finalizarPdf(doc);
