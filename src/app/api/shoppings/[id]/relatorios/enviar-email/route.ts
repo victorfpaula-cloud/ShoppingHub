@@ -4,6 +4,11 @@ import { enviarRelatoriosPorEmail } from "@/lib/relatorios";
 
 const DIAS_DO_ENVIO_MANUAL = 30;
 
+// Sem isso, a function roda no limite padrão da Vercel (10s) — gerar os dois PDFs (leitura da
+// logo, desenho dos cartões/barras) mais a chamada pro Resend passa disso fácil, e o usuário via
+// só uma tela em branco sem nenhum aviso de erro (relatado em 06/09/2026).
+export const maxDuration = 60;
+
 // Envio manual dos relatórios (menções + atendimentos) por e-mail — pedido em 06/09/2026 pra não
 // precisar esperar o ciclo automático de 30 dias. Sempre usa os últimos 30 dias corridos a partir
 // de agora, e nunca mexe no registro de `shoppinghub_exportacoes_mencoes` (isso é só do ciclo

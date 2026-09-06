@@ -15,10 +15,16 @@ const nextConfig = {
     // binário fica de fora do pacote da function na Vercel e o comprimirVideo() quebra em
     // produção. Só nas duas rotas que processam menção de Story recebida (onde o vídeo é
     // comprimido) — ver src/lib/comprimirVideo.ts.
+    // O pdfkit lê as métricas das fontes padrão (Helvetica etc.) de arquivos .afm dentro do
+    // próprio pacote, também via caminho montado em tempo de execução — mesmo risco do
+    // ffmpeg-static acima. Incluído nas duas rotas que geram PDF de relatório (ver
+    // src/lib/pdfRelatorio.ts): o envio manual e o cron que faz o ciclo automático de 30 dias.
     outputFileTracingIncludes: {
       "/api/webhook/instagram": ["./node_modules/ffmpeg-static/**"],
       "/api/bridge/sendpulse/webhook": ["./node_modules/ffmpeg-static/**"],
       "/api/manutencao/recomprimir-videos": ["./node_modules/ffmpeg-static/**"],
+      "/api/shoppings/[id]/relatorios/enviar-email": ["./node_modules/pdfkit/js/data/**"],
+      "/api/cron/publicar-mencoes": ["./node_modules/pdfkit/js/data/**"],
     },
   },
   async headers() {

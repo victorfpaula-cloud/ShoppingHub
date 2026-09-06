@@ -1,6 +1,7 @@
 import { criarClienteAdmin } from "@/lib/supabase/admin";
 import { inicioDoDiaBrasiliaISO } from "@/lib/mencoes";
 import { DiaDeMencoesAccordion } from "@/components/DiaDeMencoesAccordion";
+import { BotaoEnviarRelatorioPorEmail } from "@/components/BotaoEnviarRelatorioPorEmail";
 
 export const dynamic = "force-dynamic";
 
@@ -125,32 +126,22 @@ export default async function RelatoriosDeMencoesPage({
             Visão geral de todas as menções de Story recebidas e republicadas, por loja e por dia.
           </p>
         </div>
-        <div className="flex shrink-0 flex-wrap items-center gap-2">
-          <a
-            href={`/api/shoppings/${params.id}/relatorios/exportar?dias=15`}
-            className="rounded-[9px] border border-white/14 px-3.5 py-2 text-xs font-semibold text-neutral-200 hover:bg-white/5"
-          >
-            Exportar últimos 15 dias
-          </a>
-          <a
-            href={`/api/shoppings/${params.id}/relatorios/exportar?dias=30`}
-            className="rounded-[9px] border border-white/14 px-3.5 py-2 text-xs font-semibold text-neutral-200 hover:bg-white/5"
-          >
-            Exportar últimos 30 dias
-          </a>
-          <form action={`/api/shoppings/${params.id}/relatorios/enviar-email`} method="POST">
-            <button
-              type="submit"
-              className="flex items-center gap-1.5 rounded-[9px] bg-accent px-3.5 py-2 text-xs font-bold text-white shadow-[0_8px_20px_-8px_rgba(124,110,242,0.55)] transition hover:bg-accent-strong"
+        <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
+          <BotaoEnviarRelatorioPorEmail shoppingId={params.id} />
+          <div className="grid grid-cols-2 gap-2 sm:order-1 sm:flex">
+            <a
+              href={`/api/shoppings/${params.id}/relatorios/exportar?dias=15`}
+              className="rounded-[9px] border border-white/14 px-3.5 py-2 text-center text-xs font-semibold text-neutral-200 hover:bg-white/5"
             >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                <path d="M4 4h16v16H4z" opacity="0" />
-                <path d="M22 6l-10 7L2 6" />
-                <path d="M2 6h20v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6Z" />
-              </svg>
-              Enviar por e-mail (últimos 30 dias)
-            </button>
-          </form>
+              Exportar últimos 15 dias
+            </a>
+            <a
+              href={`/api/shoppings/${params.id}/relatorios/exportar?dias=30`}
+              className="rounded-[9px] border border-white/14 px-3.5 py-2 text-center text-xs font-semibold text-neutral-200 hover:bg-white/5"
+            >
+              Exportar últimos 30 dias
+            </a>
+          </div>
         </div>
       </div>
 
