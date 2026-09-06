@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import sharp from "sharp";
 import { baixarMidiaDoStory } from "./metaMessaging";
 import { adicionarFaixaDeCredito, ehImagem } from "./creditoNaImagem";
 import { comprimirVideo } from "./comprimirVideo";
@@ -64,6 +65,56 @@ export async function subirMidiaDeMencao(
   const { data } = admin.storage.from(BUCKET_MENCOES).getPublicUrl(storagePath);
 
   return { storagePath, urlPublica: data.publicUrl };
+}
+
+// ~3x o tamanho exibido na Fila de Menções (ver FilaDeMencoesPage), pra ficar nítido em telas
+// retina sem pesar — qualidade 60 numa imagem 160x160 fica na casa de poucos KB.
+const LARGURA_THUMBNAIL = 160;
+const QUALIDADE_THUMBNAIL = 60;
+
+/**
+ * Gera uma miniatura pequena e comprimida a partir da mídia recém-publicada, ANTES dela ser
+ * apagada do Storage (ver cron de publicação) — sem isso, a Fila de Menções não teria nenhuma
+ * imagem pra mostrar no resumo de "hoje", já que o arquivo original não fica guardado (pedido em
+ * 05/09/2026, pra não acumular espaço no Storage). Só faz sentido pra imagem: vídeo já é mostrado
+ * com um ícone fixo em vez de miniatura (mesma lógica de não baixar/tocar vídeo na Fila), então
+ * nem tenta gerar. Nunca lança erro — se falhar, a menção fica sem miniatura (mostra o ícone
+ * genérico), mas a publicação em si (que já aconteceu de verdade no Instagram) não é afetada.
+ */
+export async function gerarThumbnailDeMencao(
+  admin: SupabaseClient,
+  mencaoId: string,
+  storagePath: string
+): Promise<string | null> {
+  if (storagePath.endsWith(".mp4")) return null;
+
+  try {
+    const { data: original, error: erroAoBaixar } = await admin.storage
+      .from(BUCKET_MENCOES)
+      .download(storagePath);
+
+    if (erroAoBaixar || !original) {
+      throw erroAoBaixar ?? new Error("Download da mídia original veio vazio.");
+    }
+
+    const bytesOriginais = Buffer.from(await original.arrayBuffer());
+    const bytesDaThumbnail = await sharp(bytesOriginais)
+      .resize(LARGURA_THUMBNAIL, LARGURA_THUMBNAIL, { fit: "cover" })
+      .jpeg({ quality: QUALIDADE_THUMBNAIL })
+      .toBuffer();
+
+    const thumbnailPath = `${mencaoId}-thumb.jpg`;
+    const { error: erroAoSubir } = await admin.storage
+      .from(BUCKET_MENCOES)
+      .upload(thumbnailPath, bytesDaThumbnail, { contentType: "image/jpeg", upsert: true });
+
+    if (erroAoSubir) throw erroAoSubir;
+
+    return thumbnailPath;
+  } catch (erro) {
+    console.error(`Falha ao gerar thumbnail da menção ${mencaoId}:`, erro);
+    return null;
+  }
 }
 
 /**

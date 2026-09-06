@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { criarClienteAdmin } from "@/lib/supabase/admin";
 import { publicarStoryNoInstagram } from "@/lib/metaMessaging";
-import { BUCKET_MENCOES, tipoDeMidiaPorContentType } from "@/lib/mencoes";
+import { BUCKET_MENCOES, tipoDeMidiaPorContentType, gerarThumbnailDeMencao } from "@/lib/mencoes";
 import { limparMensagensAntigas } from "@/lib/retencao";
 import { exportarRelatoriosDevidos } from "@/lib/relatorios";
 
@@ -192,6 +192,10 @@ async function publicarMencao(
     }`
   );
 
+  // Gera a miniatura ANTES de apagar o arquivo original — depois desse ponto não sobra nenhuma
+  // mídia em tamanho real guardada (ver comentário abaixo), só essa versão pequena/comprimida.
+  const thumbnailPath = await gerarThumbnailDeMencao(admin, mencao.id, mencao.storage_path);
+
   await admin
     .from("shoppinghub_mencoes")
     .update({
@@ -199,12 +203,14 @@ async function publicarMencao(
       publicado_em: new Date().toISOString(),
       story_media_id: storyMediaId,
       storage_path: null,
+      thumbnail_path: thumbnailPath,
     })
     .eq("id", mencao.id);
 
   // Já publicou de verdade (storyMediaId confirma que a Meta recebeu a mídia) — não tem motivo
-  // pra continuar guardando o arquivo aqui. O registro em shoppinghub_mencoes (loja, horário,
-  // status) já serve de log/auditoria sem precisar acumular mídia no Storage.
+  // pra continuar guardando o arquivo em tamanho real aqui. O registro em shoppinghub_mencoes
+  // (loja, horário, status, miniatura pequena) já serve de log/auditoria sem precisar acumular
+  // mídia grande no Storage.
   const { error: erroAoApagar } = await admin.storage
     .from(BUCKET_MENCOES)
     .remove([mencao.storage_path]);

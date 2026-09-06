@@ -57,7 +57,7 @@ export default async function FilaDeMencoesPage({
     idsDasLojas.length > 0
       ? await admin
           .from("shoppinghub_mencoes")
-          .select("id, loja_id, status, publicado_em")
+          .select("id, loja_id, status, publicado_em, thumbnail_path")
           .in("loja_id", idsDasLojas)
           .in("status", ["publicado", "descartado_limite"])
           .gte("recebido_em", inicioDeHoje)
@@ -233,19 +233,47 @@ export default async function FilaDeMencoesPage({
         </p>
 
         <div className="mt-3.5 flex flex-col gap-2">
-          {publicadasHoje.map((mencao) => (
-            <div
-              key={mencao.id}
-              className="flex items-center justify-between gap-3 rounded-xl border border-white/8 bg-ink-850 px-4 py-2.5"
-            >
-              <span className="truncate text-[13px] font-semibold text-neutral-200">
-                {nomePorLoja.get(mencao.loja_id) ?? "Loja removida"}
-              </span>
-              <span className="shrink-0 text-[11.5px] text-neutral-500">
-                {formatarDataHora(mencao.publicado_em)}
-              </span>
-            </div>
-          ))}
+          {publicadasHoje.map((mencao) => {
+            const urlDaThumbnail = mencao.thumbnail_path
+              ? admin.storage.from(BUCKET_MENCOES).getPublicUrl(mencao.thumbnail_path).data.publicUrl
+              : null;
+
+            return (
+              <div
+                key={mencao.id}
+                className="flex items-center gap-3 rounded-xl border border-white/8 bg-ink-850 px-3 py-2"
+              >
+                {urlDaThumbnail ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={urlDaThumbnail}
+                    alt=""
+                    loading="lazy"
+                    decoding="async"
+                    className="h-9 w-9 shrink-0 rounded-lg object-cover"
+                  />
+                ) : (
+                  // Vídeo (sem miniatura, ver gerarThumbnailDeMencao) ou menção antiga, de antes
+                  // dessa miniatura existir — ícone genérico no lugar, sem quebrar o layout.
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-ink-950 text-neutral-600">
+                    <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+                      <path
+                        fillRule="evenodd"
+                        d="M1 5.25A2.25 2.25 0 0 1 3.25 3h13.5A2.25 2.25 0 0 1 19 5.25v9.5A2.25 2.25 0 0 1 16.75 17H3.25A2.25 2.25 0 0 1 1 14.75v-9.5Zm1.5 5.81v3.69c0 .414.336.75.75.75h13.5a.75.75 0 0 0 .75-.75v-2.69l-2.22-2.219a.75.75 0 0 0-1.06 0l-1.91 1.909.47.47a.75.75 0 1 1-1.06 1.06L6.53 8.091a.75.75 0 0 0-1.06 0l-2.97 2.97ZM12 7a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                  </div>
+                )}
+                <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-neutral-200">
+                  {nomePorLoja.get(mencao.loja_id) ?? "Loja removida"}
+                </span>
+                <span className="shrink-0 text-[11.5px] text-neutral-500">
+                  {formatarDataHora(mencao.publicado_em)}
+                </span>
+              </div>
+            );
+          })}
 
           {publicadasHoje.length === 0 && (
             <p className="rounded-2xl border border-dashed border-white/12 px-4 py-5 text-center text-sm text-neutral-400">
