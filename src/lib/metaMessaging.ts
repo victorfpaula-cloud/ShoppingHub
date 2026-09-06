@@ -207,9 +207,9 @@ async function aguardarContainerPronto(
  * `usernameParaMarcar`, quando informado, usa o campo `user_tags` (suportado pra Stories de
  * imagem e vídeo desde 09/07/2025) pra marcar a loja que gerou a menção — {x, y} é a posição
  * declarada da marcação na mídia (0.0–1.0, a partir do canto superior esquerdo). Usa
- * `POSICAO_Y_TAG_NATIVA` (ver creditoNaImagem.ts) — posição independente do selo queimado
- * (`POSICAO_Y_SELO`), que fica perto do topo; essa marcação nativa fica perto do rodapé, dentro da
- * área segura que a Meta recomenda pra elementos interativos.
+ * `POSICAO_Y_TAG_NATIVA` (ver creditoNaImagem.ts) — o MESMO valor usado pra posicionar o selo
+ * queimado, de propósito: os dois precisam ficar alinhados (ver comentário lá) pra quem visualiza
+ * a Story não achar que o selo queimado é a marcação clicável quando na verdade não é.
  *
  * Confirmado na prática em 05/09/2026: essa marcação aparece sim, visível, na Story publicada —
  * um "chip" com o nome da conta marcada e uma seta pra abrir o perfil dela (parecido com uma

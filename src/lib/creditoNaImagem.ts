@@ -14,19 +14,19 @@ export function ehImagem(contentType: string): boolean {
   return contentType.includes("image");
 }
 
-// Fração da altura onde fica o CENTRO da marcação nativa (user_tags, ver metaMessaging.ts) — não
-// pode ficar muito perto do rodapé (~0.92, testado em 04/09/2026): a barra de "responder" que o
-// próprio Instagram desenha por cima da Story intercepta o toque nessa faixa inferior (~13% de
+// Fração da altura onde fica o CENTRO do selo queimado E da marcação nativa (user_tags, ver
+// metaMessaging.ts) — os dois usam o MESMO valor de propósito, pra ficarem alinhados: o selo é só
+// um desenho, não é clicável sozinho, então ele precisa marcar visualmente o lugar EXATO onde a
+// marcação de verdade responde ao toque (senão vira um botão "mudo" que parece real, mas não é —
+// visto na prática em 06/09/2026, quando os dois ficaram temporariamente em posições diferentes).
+//
+// Não pode ficar muito perto do rodapé (~0.92, testado em 04/09/2026): a barra de "responder" que
+// o próprio Instagram desenha por cima da Story intercepta o toque nessa faixa inferior (~13% de
 // baixo). 0.80 fica dentro da área segura (a Meta recomenda evitar os ~13% de cima e de baixo da
-// tela pra qualquer elemento interativo).
+// tela pra qualquer elemento interativo) — o topo tem essa mesma faixa reservada pro cabeçalho da
+// própria Story (foto de perfil, nome da conta, horário, menu, botão de fechar), então mover pra
+// lá teria o mesmo problema, só que no sentido inverso.
 export const POSICAO_Y_TAG_NATIVA = 0.8;
-
-// Posição do selo queimado (nome/@usuário) — pedido em 06/09/2026 pra ficar perto do topo (logo
-// abaixo do cabeçalho da Story, onde aparece a conta que postou) e mais pra esquerda, em vez de
-// centralizado. Y é a fração da altura onde fica o CENTRO do selo; X é a fração da largura onde
-// fica a BORDA ESQUERDA dele (não o centro — é uma margem da lateral, não uma posição central).
-export const POSICAO_Y_SELO = 0.1;
-export const POSICAO_X_SELO = 0.03;
 
 // Selo pequeno (formato pílula, cantos arredondados) em vez da faixa preta de ponta a ponta que
 // tinha antes — achada "exagerada" na prática (relatado em 05/09/2026). Mais parecido com o
@@ -103,8 +103,8 @@ export async function adicionarFaixaDeCredito(
   const altura = metadados.height ?? 1920;
 
   const selo = await gerarSeloDeCredito(username, largura);
-  const left = Math.round(largura * POSICAO_X_SELO);
-  const top = Math.round(altura * POSICAO_Y_SELO - selo.altura / 2);
+  const left = Math.round((largura - selo.largura) / 2);
+  const top = Math.round(altura * POSICAO_Y_TAG_NATIVA - selo.altura / 2);
 
   const resultado = await imagem
     .composite([{ input: selo.png, left, top }])

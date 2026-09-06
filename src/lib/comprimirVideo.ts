@@ -4,7 +4,7 @@ import { promisify } from "node:util";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-import { gerarSeloDeCredito, POSICAO_X_SELO, POSICAO_Y_SELO } from "./creditoNaImagem";
+import { gerarSeloDeCredito, POSICAO_Y_TAG_NATIVA } from "./creditoNaImagem";
 
 const execFileAsync = promisify(execFile);
 
@@ -21,8 +21,8 @@ const LARGURA_DE_REFERENCIA_PARA_SELO = 1080;
 /**
  * Corta o vídeo pros primeiros 10 segundos, recomprime num formato garantidamente compatível
  * (H.264 + AAC, largura limitada a 1080px) e queima o MESMO selo de crédito usado na imagem (ver
- * creditoNaImagem.ts), na mesma posição vertical (POSICAO_Y_SELO) — tudo numa única passada de
- * ffmpeg, pra não recodificar duas vezes.
+ * creditoNaImagem.ts), centralizado e alinhado com a marcação nativa (POSICAO_Y_TAG_NATIVA) —
+ * tudo numa única passada de ffmpeg, pra não recodificar duas vezes.
  *
  * O selo é necessário porque, diferente de imagem (onde a marcação nativa da Meta, `user_tags`,
  * aparece visível sozinha), em VÍDEO essa mesma marcação fica completamente invisível até o
@@ -54,7 +54,7 @@ export async function comprimirVideo(
     // certos mesmo com essa "duração infinita" do selo.
     const filtro = [
       "[0:v]scale='min(1080,iw)':-2[base]",
-      `[base][1:v]overlay=x='main_w*${POSICAO_X_SELO}':y='main_h*${POSICAO_Y_SELO}-overlay_h/2'[saida]`,
+      `[base][1:v]overlay=x='(main_w-overlay_w)/2':y='main_h*${POSICAO_Y_TAG_NATIVA}-overlay_h/2'[saida]`,
     ].join(";");
 
     await execFileAsync(ffmpegPath, [
