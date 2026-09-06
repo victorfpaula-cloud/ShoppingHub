@@ -157,56 +157,85 @@ async function buscarMencoesDoPeriodo(
   return { mencoes: (mencoes ?? []) as MencaoParaCSV[], nomePorLoja };
 }
 
-/**
- * Gera os dois relatórios (menções e atendimentos) do período em PDF e manda por e-mail via
- * Resend — usado tanto pelo ciclo automático a cada 30 dias quanto pelo envio manual (botão
- * "Enviar por e-mail" na página de Relatórios, que usa sempre os últimos 30 dias corridos).
- * Nunca lança erro (ver enviarEmailComAnexos) — devolve se deu certo, pra quem precisa avisar o
- * usuário (o envio manual).
- */
-export async function enviarRelatoriosPorEmail(
-  admin: SupabaseClient,
-  shoppingId: string,
-  periodoInicio: Date,
-  periodoFim: Date
-): Promise<boolean> {
+async function buscarNomeDoShopping(admin: SupabaseClient, shoppingId: string): Promise<string> {
   const { data: shopping } = await admin
     .from("shoppinghub_shoppings")
     .select("nome")
     .eq("id", shoppingId)
     .maybeSingle();
+  return shopping?.nome ?? "Shopping";
+}
 
-  const nomeDoShopping = shopping?.nome ?? "Shopping";
+function sufixoDoArquivo(periodoInicio: Date, periodoFim: Date): string {
+  return `${periodoInicio.toISOString().slice(0, 10)}_a_${periodoFim.toISOString().slice(0, 10)}.pdf`;
+}
+
+/**
+ * Manda só o relatório de Menções/Stories por e-mail, em PDF — separado do de atendimentos
+ * (pedido em 06/09/2026: mandar os dois juntos num e-mail só suspeitou-se de estar pesado demais
+ * pra function, então cada relatório agora é gerado e enviado numa chamada independente, mais leve
+ * — usado tanto pelo ciclo automático a cada 30 dias quanto pelo botão "Enviar por e-mail" na
+ * página de Relatórios). Nunca lança erro (ver enviarEmailComAnexos) — devolve se deu certo.
+ */
+export async function enviarRelatorioDeMencoesPorEmail(
+  admin: SupabaseClient,
+  shoppingId: string,
+  periodoInicio: Date,
+  periodoFim: Date
+): Promise<boolean> {
+  const nomeDoShopping = await buscarNomeDoShopping(admin, shoppingId);
   const periodoFormatado = `${formatarDataCurtaEmail(periodoInicio)} a ${formatarDataCurtaEmail(periodoFim)}`;
 
   const { mencoes, nomePorLoja } = await buscarMencoesDoPeriodo(admin, shoppingId, periodoInicio, periodoFim);
-  const resumoDeMencoes = calcularResumoDeMencoes(mencoes, nomePorLoja);
-  const resumoDeAtendimentos = await buscarResumoDeAtendimentos(admin, shoppingId, periodoInicio, periodoFim);
+  const resumo = calcularResumoDeMencoes(mencoes, nomePorLoja);
 
-  const [pdfDeMencoes, pdfDeAtendimentos] = await Promise.all([
-    gerarPdfDeMencoes({ shoppingNome: nomeDoShopping, periodoTexto: periodoFormatado, ...resumoDeMencoes }),
-    gerarPdfDeAtendimentos({ shoppingNome: nomeDoShopping, periodoTexto: periodoFormatado, ...resumoDeAtendimentos }),
-  ]);
-
-  const sufixoArquivo = `${periodoInicio.toISOString().slice(0, 10)}_a_${periodoFim
-    .toISOString()
-    .slice(0, 10)}.pdf`;
+  const pdf = await gerarPdfDeMencoes({
+    shoppingNome: nomeDoShopping,
+    periodoTexto: periodoFormatado,
+    ...resumo,
+  });
 
   return enviarEmailComAnexos({
     destinatario: EMAIL_DESTINO_DOS_RELATORIOS,
-    assunto: `Relatórios ShoppingHub — ${nomeDoShopping} (${periodoFormatado})`,
+    assunto: `Relatório de Menções ShoppingHub — ${nomeDoShopping} (${periodoFormatado})`,
     corpoHtml: `
-      <p>Relatórios de <strong>${nomeDoShopping}</strong>, período de ${periodoFormatado}:</p>
-      <ul>
-        <li>Menções de Story recebidas e republicadas — ${resumoDeMencoes.publicados} publicadas</li>
-        <li>Atendimentos feitos pela IA — ${resumoDeAtendimentos.recebidas} mensagens recebidas</li>
-      </ul>
-      <p>Os dois relatórios vão em PDF, em anexo.</p>
+      <p>Relatório de Menções/Stories de <strong>${nomeDoShopping}</strong>, período de ${periodoFormatado}:
+      ${resumo.publicados} publicadas.</p>
+      <p>Em anexo, em PDF.</p>
     `,
-    anexos: [
-      { nomeArquivo: `mencoes_${sufixoArquivo}`, conteudo: pdfDeMencoes },
-      { nomeArquivo: `atendimentos_${sufixoArquivo}`, conteudo: pdfDeAtendimentos },
-    ],
+    anexos: [{ nomeArquivo: `mencoes_${sufixoDoArquivo(periodoInicio, periodoFim)}`, conteudo: pdf }],
+  });
+}
+
+/**
+ * Igual ao de cima, só que pro relatório de Atendimentos.
+ */
+export async function enviarRelatorioDeAtendimentosPorEmail(
+  admin: SupabaseClient,
+  shoppingId: string,
+  periodoInicio: Date,
+  periodoFim: Date
+): Promise<boolean> {
+  const nomeDoShopping = await buscarNomeDoShopping(admin, shoppingId);
+  const periodoFormatado = `${formatarDataCurtaEmail(periodoInicio)} a ${formatarDataCurtaEmail(periodoFim)}`;
+
+  const resumo = await buscarResumoDeAtendimentos(admin, shoppingId, periodoInicio, periodoFim);
+
+  const pdf = await gerarPdfDeAtendimentos({
+    shoppingNome: nomeDoShopping,
+    periodoTexto: periodoFormatado,
+    ...resumo,
+  });
+
+  return enviarEmailComAnexos({
+    destinatario: EMAIL_DESTINO_DOS_RELATORIOS,
+    assunto: `Relatório de Atendimentos ShoppingHub — ${nomeDoShopping} (${periodoFormatado})`,
+    corpoHtml: `
+      <p>Relatório de Atendimentos de <strong>${nomeDoShopping}</strong>, período de ${periodoFormatado}:
+      ${resumo.recebidas} mensagens recebidas.</p>
+      <p>Em anexo, em PDF.</p>
+    `,
+    anexos: [{ nomeArquivo: `atendimentos_${sufixoDoArquivo(periodoInicio, periodoFim)}`, conteudo: pdf }],
   });
 }
 
@@ -275,6 +304,9 @@ async function gerarExportacao(
   }
 
   // E-mail é "melhor esforço" — se falhar, só loga (ver enviarEmailComAnexos): o ciclo já foi
-  // registrado acima, então essa exportação não deve ser tentada de novo por causa disso.
-  await enviarRelatoriosPorEmail(admin, shoppingId, periodoInicio, periodoFim);
+  // registrado acima, então essa exportação não deve ser tentada de novo por causa disso. Dois
+  // e-mails separados (não um só com dois anexos) — mais leve por chamada, e um dos dois falhar
+  // não impede o outro de sair.
+  await enviarRelatorioDeMencoesPorEmail(admin, shoppingId, periodoInicio, periodoFim);
+  await enviarRelatorioDeAtendimentosPorEmail(admin, shoppingId, periodoInicio, periodoFim);
 }

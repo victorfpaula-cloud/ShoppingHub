@@ -1,4 +1,5 @@
 import PDFDocument from "pdfkit";
+import sharp from "sharp";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -21,10 +22,21 @@ const COR_ACCENT = "#7c6ef2";
 
 type Documento = InstanceType<typeof PDFDocument>;
 
+// O PNG original (256x256, ~65KB) é o corpo inteiro do PDF praticamente sozinho — no cabeçalho ele
+// só aparece a 40pt (bem pequeno), então reduzir e converter pra JPEG antes de embutir corta isso
+// pra menos de 3KB sem perda visível. O fundo "achatado" usa a mesma cor da faixa escura do
+// cabeçalho (ver desenharCabecalho) — como o logo já vai por cima dessa faixa, fica imperceptível.
 let logoBufferPromise: Promise<Buffer> | null = null;
 function carregarLogo(): Promise<Buffer> {
   if (!logoBufferPromise) {
-    logoBufferPromise = readFile(path.join(process.cwd(), "public/logo-shoppinghub.png"));
+    logoBufferPromise = readFile(path.join(process.cwd(), "public/logo-shoppinghub.png")).then(
+      (original) =>
+        sharp(original)
+          .resize(96, 96)
+          .flatten({ background: COR_FUNDO_CABECALHO })
+          .jpeg({ quality: 82 })
+          .toBuffer()
+    );
   }
   return logoBufferPromise;
 }
