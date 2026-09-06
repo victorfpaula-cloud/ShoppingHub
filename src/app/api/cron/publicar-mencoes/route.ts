@@ -95,10 +95,19 @@ export async function GET(request: NextRequest) {
         console.error(`Falha ao publicar menção ${mencao.id}:`, erro);
         const tentativas = mencao.tentativas + 1;
         const novoStatus = tentativas < MAX_TENTATIVAS_AUTOMATICAS ? "pendente" : "erro";
+        // `comPrazo` só desiste de ESPERAR — não cancela a publicação em si, que continua rodando
+        // sozinha depois do catch. Se ela terminar com sucesso só um instante depois de "perder a
+        // corrida" pro prazo, a atualização de sucesso (status "publicado" + publicado_em) e essa
+        // atualização de falha aqui podem chegar ao banco em qualquer ordem. O `.eq("status",
+        // "pendente")` faz essa gravação de falha só valer se a menção AINDA estiver pendente —
+        // se o sucesso atrasado já tiver marcado como "publicado", essa gravação vira um no-op em
+        // vez de reverter o status por cima (visto em produção em 06/09/2026: menção com
+        // publicado_em preenchido mas status voltando pra "pendente").
         await admin
           .from("shoppinghub_mencoes")
           .update({ status: novoStatus, tentativas })
-          .eq("id", mencao.id);
+          .eq("id", mencao.id)
+          .eq("status", "pendente");
         resultado.falhas += 1;
       }
     }
