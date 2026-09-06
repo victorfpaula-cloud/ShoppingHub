@@ -127,7 +127,9 @@ export default async function RelatoriosDeMencoesPage({
           </p>
         </div>
         <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
-          <BotaoEnviarRelatorioPorEmail shoppingId={params.id} />
+          <BotaoEnviarRelatorioPorEmail
+            actionUrl={`/api/shoppings/${params.id}/relatorios/enviar-email`}
+          />
           <div className="grid grid-cols-2 gap-2 sm:order-1 sm:flex">
             <a
               href={`/api/shoppings/${params.id}/relatorios/exportar?dias=15`}

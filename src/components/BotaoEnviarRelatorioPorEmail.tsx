@@ -6,12 +6,12 @@ import { useState } from "react";
 // parecia que o clique "não tinha feito nada" (relatado em 06/09/2026). O `disabled` some assim
 // que o formulário é enviado de verdade (a navegação troca de página), então esse estado só
 // precisa durar até lá — o suficiente pra dar a sensação de "está processando".
-export function BotaoEnviarRelatorioPorEmail({ shoppingId }: { shoppingId: string }) {
+export function BotaoEnviarRelatorioPorEmail({ actionUrl }: { actionUrl: string }) {
   const [enviando, setEnviando] = useState(false);
 
   return (
     <form
-      action={`/api/shoppings/${shoppingId}/relatorios/enviar-email`}
+      action={actionUrl}
       method="POST"
       onSubmit={() => setEnviando(true)}
       className="w-full sm:order-3 sm:w-auto"

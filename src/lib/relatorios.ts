@@ -232,7 +232,10 @@ export async function enviarRelatorioDeAtendimentosPorEmail(
   const pdf = await gerarPdfDeAtendimentos({
     shoppingNome: nomeDoShopping,
     periodoTexto: periodoFormatado,
-    ...resumo,
+    recebidas: resumo.recebidas,
+    respondidas: resumo.respondidas,
+    clientesUnicos: resumo.clientesUnicos,
+    lojasAcionadas: resumo.lojasAcionadas,
   });
 
   return enviarEmailComAnexos({

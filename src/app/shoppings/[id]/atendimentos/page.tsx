@@ -1,5 +1,6 @@
 import { criarClienteAdmin } from "@/lib/supabase/admin";
 import { diasDeRetencaoDeMensagens } from "@/lib/retencao";
+import { BotaoEnviarRelatorioPorEmail } from "@/components/BotaoEnviarRelatorioPorEmail";
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +31,27 @@ function formatarDataHora(iso: string): string {
   }).format(new Date(iso));
 }
 
-export default async function AtendimentosPage({ params }: { params: { id: string } }) {
+function formatarDataLonga(iso: string): string {
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    weekday: "long",
+    day: "2-digit",
+    month: "long",
+  }).format(new Date(iso));
+}
+
+function chaveDoDia(iso: string): string {
+  // Chave estável (ano-mês-dia em Brasília) pra agrupar por dia sem depender de fuso do servidor.
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date(iso));
+}
+
+export default async function AtendimentosPage({
+  params,
+  searchParams,
+}: {
+  params: { id: string };
+  searchParams: { email?: string };
+}) {
   const admin = criarClienteAdmin();
 
   const { data: contas } = await admin
@@ -91,6 +112,16 @@ export default async function AtendimentosPage({ params }: { params: { id: strin
     (a, b) => new Date(b.ultimaMensagemEm).getTime() - new Date(a.ultimaMensagemEm).getTime()
   );
 
+  // Agrupado por dia do ÚLTIMO contato (pedido em 06/09/2026) — cada dia é um dropdown, e dentro
+  // dele cada atendimento continua sendo o próprio dropdown que já existia.
+  const porDia = new Map<string, Atendimento[]>();
+  for (const atendimento of atendimentos) {
+    const chave = chaveDoDia(atendimento.ultimaMensagemEm);
+    if (!porDia.has(chave)) porDia.set(chave, []);
+    porDia.get(chave)!.push(atendimento);
+  }
+  const diasOrdenados = Array.from(porDia.keys()).sort((a, b) => (a < b ? 1 : -1));
+
   return (
     <div>
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -102,67 +133,103 @@ export default async function AtendimentosPage({ params }: { params: { id: strin
             apagado automaticamente.
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <a
-            href={`/api/shoppings/${params.id}/atendimentos/exportar?dias=15`}
-            className="rounded-[9px] border border-white/14 px-3.5 py-2 text-xs font-semibold text-neutral-200 hover:bg-white/5"
-          >
-            Exportar últimos 15 dias
-          </a>
-          <a
-            href={`/api/shoppings/${params.id}/atendimentos/exportar?dias=30`}
-            className="rounded-[9px] border border-white/14 px-3.5 py-2 text-xs font-semibold text-neutral-200 hover:bg-white/5"
-          >
-            Exportar últimos 30 dias
-          </a>
+        <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
+          <BotaoEnviarRelatorioPorEmail
+            actionUrl={`/api/shoppings/${params.id}/atendimentos/enviar-email`}
+          />
+          <div className="grid grid-cols-2 gap-2 sm:order-1 sm:flex">
+            <a
+              href={`/api/shoppings/${params.id}/atendimentos/exportar?dias=15`}
+              className="rounded-[9px] border border-white/14 px-3.5 py-2 text-center text-xs font-semibold text-neutral-200 hover:bg-white/5"
+            >
+              Exportar últimos 15 dias
+            </a>
+            <a
+              href={`/api/shoppings/${params.id}/atendimentos/exportar?dias=30`}
+              className="rounded-[9px] border border-white/14 px-3.5 py-2 text-center text-xs font-semibold text-neutral-200 hover:bg-white/5"
+            >
+              Exportar últimos 30 dias
+            </a>
+          </div>
         </div>
       </div>
 
-      <div className="mt-6 flex flex-col gap-2.5">
-        {atendimentos.map((atendimento) => (
-          <details
-            key={atendimento.instagramScopedId}
-            className="rounded-2xl border border-white/8 bg-ink-900"
-          >
-            <summary className="flex cursor-pointer flex-wrap items-center justify-between gap-2 px-4 py-3.5">
-              <div className="min-w-0">
-                <p className="text-[13.5px] font-bold text-neutral-100">
-                  {atendimento.clienteNome}
-                  {atendimento.clienteUsername && (
-                    <span className="text-neutral-500"> @{atendimento.clienteUsername}</span>
-                  )}
-                </p>
-                <p className="mt-0.5 text-[11.5px] text-neutral-500">
-                  Último contato em {formatarDataHora(atendimento.ultimaMensagemEm)}
-                </p>
-              </div>
-              <span className="shrink-0 rounded-full bg-white/8 px-2.5 py-1 text-[10.5px] font-semibold text-neutral-300">
-                {atendimento.totalMensagens} mensagem{atendimento.totalMensagens === 1 ? "" : "ns"}
-              </span>
-            </summary>
+      {searchParams.email === "enviado" && (
+        <div className="mt-4 rounded-xl border border-ok/25 bg-ok/10 px-4 py-2.5 text-sm text-ok">
+          Relatório enviado por e-mail com sucesso.
+        </div>
+      )}
 
-            <ul className="divide-y divide-white/8 border-t border-white/8">
-              {atendimento.mensagens.map((m, indice) => (
-                <li key={indice} className="flex flex-col gap-0.5 px-4 py-2.5 text-xs">
-                  <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-                    <span
-                      className={
-                        m.direcao === "recebida"
-                          ? "font-semibold text-neutral-300"
-                          : "font-semibold text-accent-strong"
-                      }
-                    >
-                      {m.direcao === "recebida" ? "Cliente" : "Atendimento"}
-                      {m.lojaNome && <span className="text-neutral-500"> · {m.lojaNome}</span>}
-                    </span>
-                    <span className="shrink-0 text-neutral-500">{m.dataHora}</span>
-                  </div>
-                  <p className="text-neutral-400">{m.texto}</p>
-                </li>
-              ))}
-            </ul>
-          </details>
-        ))}
+      {searchParams.email === "erro" && (
+        <div className="mt-4 rounded-xl border border-danger/30 bg-danger/10 px-4 py-2.5 text-sm text-danger">
+          Não foi possível enviar o e-mail. Confira se a RESEND_API_KEY está configurada
+          corretamente e veja os logs da Vercel pra mais detalhes.
+        </div>
+      )}
+
+      <div className="mt-6 flex flex-col gap-2.5">
+        {diasOrdenados.map((chave) => {
+          const atendimentosDoDia = porDia.get(chave)!;
+          return (
+            <details key={chave} className="rounded-2xl border border-white/8 bg-ink-900">
+              <summary className="flex cursor-pointer items-center justify-between gap-3 px-4 py-3">
+                <p className="text-[13px] font-bold capitalize text-neutral-200">
+                  {formatarDataLonga(atendimentosDoDia[0].ultimaMensagemEm)}
+                </p>
+                <span className="shrink-0 rounded-full bg-white/8 px-2.5 py-1 text-[10.5px] font-semibold text-neutral-300">
+                  {atendimentosDoDia.length} atendimento{atendimentosDoDia.length === 1 ? "" : "s"}
+                </span>
+              </summary>
+
+              <div className="flex flex-col gap-2.5 border-t border-white/8 p-2.5">
+                {atendimentosDoDia.map((atendimento) => (
+                  <details
+                    key={atendimento.instagramScopedId}
+                    className="rounded-xl border border-white/8 bg-ink-850"
+                  >
+                    <summary className="flex cursor-pointer flex-wrap items-center justify-between gap-2 px-4 py-3">
+                      <div className="min-w-0">
+                        <p className="text-[13.5px] font-bold text-neutral-100">
+                          {atendimento.clienteNome}
+                          {atendimento.clienteUsername && (
+                            <span className="text-neutral-500"> @{atendimento.clienteUsername}</span>
+                          )}
+                        </p>
+                        <p className="mt-0.5 text-[11.5px] text-neutral-500">
+                          Último contato em {formatarDataHora(atendimento.ultimaMensagemEm)}
+                        </p>
+                      </div>
+                      <span className="shrink-0 rounded-full bg-white/8 px-2.5 py-1 text-[10.5px] font-semibold text-neutral-300">
+                        {atendimento.totalMensagens} mensagem{atendimento.totalMensagens === 1 ? "" : "ns"}
+                      </span>
+                    </summary>
+
+                    <ul className="divide-y divide-white/8 border-t border-white/8">
+                      {atendimento.mensagens.map((m, indice) => (
+                        <li key={indice} className="flex flex-col gap-0.5 px-4 py-2.5 text-xs">
+                          <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+                            <span
+                              className={
+                                m.direcao === "recebida"
+                                  ? "font-semibold text-neutral-300"
+                                  : "font-semibold text-accent-strong"
+                              }
+                            >
+                              {m.direcao === "recebida" ? "Cliente" : "Atendimento"}
+                              {m.lojaNome && <span className="text-neutral-500"> · {m.lojaNome}</span>}
+                            </span>
+                            <span className="shrink-0 text-neutral-500">{m.dataHora}</span>
+                          </div>
+                          <p className="text-neutral-400">{m.texto}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                ))}
+              </div>
+            </details>
+          );
+        })}
 
         {atendimentos.length === 0 && (
           <p className="rounded-2xl border border-dashed border-white/12 px-4 py-6 text-center text-sm text-neutral-400">

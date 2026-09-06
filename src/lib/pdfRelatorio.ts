@@ -360,6 +360,8 @@ export async function gerarPdfDeMencoes(opts: {
   return finalizarPdf(doc);
 }
 
+// Sem o ranking por loja dessa vez (pedido em 06/09/2026) — só o resumo em cartões mesmo, o
+// detalhamento mensagem a mensagem continua só no CSV (ver gerarCsvDeAtendimentos).
 export async function gerarPdfDeAtendimentos(opts: {
   shoppingNome: string;
   periodoTexto: string;
@@ -367,30 +369,21 @@ export async function gerarPdfDeAtendimentos(opts: {
   respondidas: number;
   clientesUnicos: number;
   lojasAcionadas: number;
-  ranking: LinhaDeRanking[];
 }): Promise<Buffer> {
   const doc = new PDFDocument({ size: "A4", margin: 0, bufferPages: true });
 
-  let y = await desenharCabecalho(doc, {
+  const y = await desenharCabecalho(doc, {
     tituloDocumento: "Relatório de Atendimentos",
     shoppingNome: opts.shoppingNome,
     periodoTexto: opts.periodoTexto,
   });
 
-  y = desenharCartoesDeEstatistica(doc, y, [
+  desenharCartoesDeEstatistica(doc, y, [
     { rotulo: "Recebidas", valor: opts.recebidas, cor: "#7c6ef2" },
     { rotulo: "Respondidas", valor: opts.respondidas, cor: "#34d399" },
     { rotulo: "Clientes únicos", valor: opts.clientesUnicos, cor: "#9ca3af" },
     { rotulo: "Lojistas acionados", valor: opts.lojasAcionadas, cor: "#9c90ff" },
   ]);
-
-  desenharRanking(
-    doc,
-    y,
-    "Atendimentos por loja no período",
-    opts.ranking,
-    (n) => `${n} mensage${n === 1 ? "m" : "ns"}`
-  );
   desenharRodape(doc);
 
   return finalizarPdf(doc);
