@@ -1,16 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { gerarCsvDeAtendimentos } from "./atendimentos";
+import { buscarResumoDeAtendimentos } from "./atendimentos";
 import { enviarEmailComAnexos } from "./email";
-
-// Bucket PRIVADO — diferente do shoppinghub-mencoes (que precisa ser público pra Meta baixar a
-// mídia), os relatórios só são acessados de dentro do painel autenticado, via URL assinada.
-export const BUCKET_RELATORIOS = "shoppinghub-relatorios";
+import { gerarPdfDeMencoes, gerarPdfDeAtendimentos } from "./pdfRelatorio";
 
 const DIAS_ENTRE_EXPORTACOES = 30;
 
-// Pedido em 06/09/2026: a cada ciclo de exportação automática, além de salvar o CSV de menções no
-// Storage (como já acontecia), manda os dois relatórios (menções/Stories e atendimentos) por
-// e-mail — dono do ShoppingHub, sem precisar entrar no painel.
+// Pedido em 06/09/2026: em vez de guardar um CSV no Storage a cada ciclo (ninguém baixava, só
+// ocupava espaço), a exportação periódica manda os dois relatórios (menções/Stories e
+// atendimentos) direto por e-mail, em PDF — o e-mail já é o "arquivo salvo".
 const EMAIL_DESTINO_DOS_RELATORIOS = "victorfpaula@gmail.com";
 
 function formatarDataCurtaEmail(data: Date): string {
@@ -52,11 +49,18 @@ export type MencaoParaCSV = {
   story_media_id: string | null;
 };
 
-// Mesmo resumo que aparece no topo da página de Relatórios (container "Resumo do período") — pedido
-// em 06/09/2026 pra também sair no cabeçalho do CSV exportado, calculado em cima do mesmo período
-// que já foi filtrado antes de chamar gerarCsv (automático a cada 30 dias, ou manual via
-// api/shoppings/[id]/relatorios/exportar).
-function gerarLinhasDeResumo(mencoes: MencaoParaCSV[], nomePorLoja: Map<string, string>): string[] {
+type ResumoDeMencoes = {
+  publicados: number;
+  lojasAcionadas: number;
+  limiteDiario: number;
+  erros: number;
+  ranking: { nome: string; total: number }[];
+};
+
+function calcularResumoDeMencoes(
+  mencoes: MencaoParaCSV[],
+  nomePorLoja: Map<string, string>
+): ResumoDeMencoes {
   const publicados = mencoes.filter((m) => m.status === "publicado");
   const limiteDiario = mencoes.filter((m) => m.status === "descartado_limite").length;
   const erros = mencoes.filter((m) => m.status === "erro").length;
@@ -70,17 +74,25 @@ function gerarLinhasDeResumo(mencoes: MencaoParaCSV[], nomePorLoja: Map<string, 
     .map(([lojaId, total]) => ({ nome: nomePorLoja.get(lojaId) ?? "Loja removida", total }))
     .sort((a, b) => b.total - a.total);
 
+  return { publicados: publicados.length, lojasAcionadas, limiteDiario, erros, ranking };
+}
+
+// Mesmo resumo que aparece no topo da página de Relatórios (container "Resumo do período") — sai
+// também no cabeçalho do CSV exportado manualmente (api/shoppings/[id]/relatorios/exportar).
+function gerarLinhasDeResumo(mencoes: MencaoParaCSV[], nomePorLoja: Map<string, string>): string[] {
+  const resumo = calcularResumoDeMencoes(mencoes, nomePorLoja);
+
   const linhas = [
     "Resumo do período",
-    `Publicados,${publicados.length}`,
-    `Lojistas acionados,${lojasAcionadas}`,
-    `Limite diário,${limiteDiario}`,
-    `Erro,${erros}`,
+    `Publicados,${resumo.publicados}`,
+    `Lojistas acionados,${resumo.lojasAcionadas}`,
+    `Limite diário,${resumo.limiteDiario}`,
+    `Erro,${resumo.erros}`,
   ];
 
-  if (ranking.length > 0) {
+  if (resumo.ranking.length > 0) {
     linhas.push("", "Publicações por loja no período");
-    for (const linha of ranking) {
+    for (const linha of resumo.ranking) {
       linhas.push([escaparCampoCSV(linha.nome), String(linha.total)].join(","));
     }
   }
@@ -117,13 +129,95 @@ export function gerarCsv(mencoes: MencaoParaCSV[], nomePorLoja: Map<string, stri
   return "﻿" + [...resumo, "", cabecalho.join(","), ...linhas].join("\n");
 }
 
+async function buscarMencoesDoPeriodo(
+  admin: SupabaseClient,
+  shoppingId: string,
+  desde: Date,
+  ate: Date
+): Promise<{ mencoes: MencaoParaCSV[]; nomePorLoja: Map<string, string> }> {
+  const { data: lojas } = await admin
+    .from("shoppinghub_lojas")
+    .select("id, nome")
+    .eq("shopping_id", shoppingId);
+
+  const idsDasLojas = (lojas ?? []).map((l) => l.id);
+  const nomePorLoja = new Map((lojas ?? []).map((l) => [l.id, l.nome]));
+
+  const { data: mencoes } =
+    idsDasLojas.length > 0
+      ? await admin
+          .from("shoppinghub_mencoes")
+          .select("loja_id, instagram_username, status, recebido_em, publicado_em, story_media_id")
+          .in("loja_id", idsDasLojas)
+          .gte("recebido_em", desde.toISOString())
+          .lt("recebido_em", ate.toISOString())
+          .order("recebido_em", { ascending: true })
+      : { data: [] as MencaoParaCSV[] };
+
+  return { mencoes: (mencoes ?? []) as MencaoParaCSV[], nomePorLoja };
+}
+
+/**
+ * Gera os dois relatórios (menções e atendimentos) do período em PDF e manda por e-mail via
+ * Resend — usado tanto pelo ciclo automático a cada 30 dias quanto pelo envio manual (botão
+ * "Enviar por e-mail" na página de Relatórios, que usa sempre os últimos 30 dias corridos).
+ * Nunca lança erro (ver enviarEmailComAnexos) — devolve se deu certo, pra quem precisa avisar o
+ * usuário (o envio manual).
+ */
+export async function enviarRelatoriosPorEmail(
+  admin: SupabaseClient,
+  shoppingId: string,
+  periodoInicio: Date,
+  periodoFim: Date
+): Promise<boolean> {
+  const { data: shopping } = await admin
+    .from("shoppinghub_shoppings")
+    .select("nome")
+    .eq("id", shoppingId)
+    .maybeSingle();
+
+  const nomeDoShopping = shopping?.nome ?? "Shopping";
+  const periodoFormatado = `${formatarDataCurtaEmail(periodoInicio)} a ${formatarDataCurtaEmail(periodoFim)}`;
+
+  const { mencoes, nomePorLoja } = await buscarMencoesDoPeriodo(admin, shoppingId, periodoInicio, periodoFim);
+  const resumoDeMencoes = calcularResumoDeMencoes(mencoes, nomePorLoja);
+  const resumoDeAtendimentos = await buscarResumoDeAtendimentos(admin, shoppingId, periodoInicio, periodoFim);
+
+  const [pdfDeMencoes, pdfDeAtendimentos] = await Promise.all([
+    gerarPdfDeMencoes({ shoppingNome: nomeDoShopping, periodoTexto: periodoFormatado, ...resumoDeMencoes }),
+    gerarPdfDeAtendimentos({ shoppingNome: nomeDoShopping, periodoTexto: periodoFormatado, ...resumoDeAtendimentos }),
+  ]);
+
+  const sufixoArquivo = `${periodoInicio.toISOString().slice(0, 10)}_a_${periodoFim
+    .toISOString()
+    .slice(0, 10)}.pdf`;
+
+  return enviarEmailComAnexos({
+    destinatario: EMAIL_DESTINO_DOS_RELATORIOS,
+    assunto: `Relatórios ShoppingHub — ${nomeDoShopping} (${periodoFormatado})`,
+    corpoHtml: `
+      <p>Relatórios de <strong>${nomeDoShopping}</strong>, período de ${periodoFormatado}:</p>
+      <ul>
+        <li>Menções de Story recebidas e republicadas — ${resumoDeMencoes.publicados} publicadas</li>
+        <li>Atendimentos feitos pela IA — ${resumoDeAtendimentos.recebidas} mensagens recebidas</li>
+      </ul>
+      <p>Os dois relatórios vão em PDF, em anexo.</p>
+    `,
+    anexos: [
+      { nomeArquivo: `mencoes_${sufixoArquivo}`, conteudo: pdfDeMencoes },
+      { nomeArquivo: `atendimentos_${sufixoArquivo}`, conteudo: pdfDeAtendimentos },
+    ],
+  });
+}
+
 /**
  * Roda a cada chamada do cron de publicar-mencoes (evita precisar de um cron a mais — o plano
  * Hobby da Vercel só permite 2). Pra cada shopping, confere se já passou `DIAS_ENTRE_EXPORTACOES`
- * desde a última exportação (ou desde a criação do shopping, se nunca exportou) e, se sim, gera um
- * CSV com todas as menções recebidas nesse período e salva no Storage + registra em
- * `shoppinghub_exportacoes_mencoes`. Gera a exportação mesmo com zero menções no período — assim
- * o "relógio" sempre avança e não fica tentando de novo a cada execução do cron.
+ * desde a última exportação (ou desde a criação do shopping, se nunca exportou) e, se sim, manda os
+ * relatórios do período por e-mail (ver enviarRelatoriosPorEmail) e registra o ciclo em
+ * `shoppinghub_exportacoes_mencoes` — só pra saber quando foi a última vez (não guarda mais nenhum
+ * arquivo). Registra mesmo com zero menções no período — assim o "relógio" sempre avança e não
+ * fica tentando de novo a cada execução do cron.
  */
 export async function exportarRelatoriosDevidos(admin: SupabaseClient): Promise<number> {
   const { data: shoppings } = await admin
@@ -164,83 +258,23 @@ async function gerarExportacao(
   periodoInicio: Date,
   periodoFim: Date
 ): Promise<void> {
-  const { data: shopping } = await admin
-    .from("shoppinghub_shoppings")
-    .select("nome")
-    .eq("id", shoppingId)
-    .maybeSingle();
-
-  const { data: lojas } = await admin
-    .from("shoppinghub_lojas")
-    .select("id, nome")
-    .eq("shopping_id", shoppingId);
-
-  const idsDasLojas = (lojas ?? []).map((l) => l.id);
-  const nomePorLoja = new Map((lojas ?? []).map((l) => [l.id, l.nome]));
-
-  const { data: mencoes } =
-    idsDasLojas.length > 0
-      ? await admin
-          .from("shoppinghub_mencoes")
-          .select("loja_id, instagram_username, status, recebido_em, publicado_em, story_media_id")
-          .in("loja_id", idsDasLojas)
-          .gte("recebido_em", periodoInicio.toISOString())
-          .lt("recebido_em", periodoFim.toISOString())
-          .order("recebido_em", { ascending: true })
-      : { data: [] as MencaoParaCSV[] };
-
-  const csv = gerarCsv((mencoes ?? []) as MencaoParaCSV[], nomePorLoja);
-
-  const nomeArquivo = `${periodoInicio.toISOString().slice(0, 10)}_a_${periodoFim
-    .toISOString()
-    .slice(0, 10)}.csv`;
-  const storagePath = `${shoppingId}/${nomeArquivo}`;
-
-  const { error: erroAoSubir } = await admin.storage
-    .from(BUCKET_RELATORIOS)
-    .upload(storagePath, Buffer.from(csv, "utf-8"), {
-      contentType: "text/csv;charset=utf-8",
-      upsert: true,
-    });
-
-  if (erroAoSubir) {
-    throw new Error(`Falha ao subir CSV do relatório pro Storage: ${erroAoSubir.message}`);
-  }
+  const { mencoes } = await buscarMencoesDoPeriodo(admin, shoppingId, periodoInicio, periodoFim);
 
   const { error: erroAoRegistrar } = await admin.from("shoppinghub_exportacoes_mencoes").insert({
     shopping_id: shoppingId,
     periodo_inicio: periodoInicio.toISOString(),
     periodo_fim: periodoFim.toISOString(),
-    storage_path: storagePath,
-    total_mencoes: mencoes?.length ?? 0,
+    // Nenhum arquivo é guardado mais (os relatórios vão só por e-mail) — coluna mantida só porque é
+    // NOT NULL no banco; nada lê esse valor.
+    storage_path: "nao-armazenado",
+    total_mencoes: mencoes.length,
   });
 
   if (erroAoRegistrar) {
     throw new Error(`Falha ao registrar exportação de relatório: ${erroAoRegistrar.message}`);
   }
 
-  // E-mail é "melhor esforço" — se falhar, só loga (ver enviarEmailComAnexos): o CSV de menções já
-  // está salvo e registrado acima, então essa exportação não deve ser tentada de novo por causa
-  // disso. O CSV de atendimentos NÃO é salvo no Storage (só vai anexado no e-mail) — não tem uma
-  // tabela de "exportações de atendimento" nem falta fazer uma só pra isso.
-  const csvDeAtendimentos = await gerarCsvDeAtendimentos(admin, shoppingId, periodoInicio, periodoFim);
-  const nomeDoShopping = shopping?.nome ?? "Shopping";
-  const periodoFormatado = `${formatarDataCurtaEmail(periodoInicio)} a ${formatarDataCurtaEmail(periodoFim)}`;
-
-  await enviarEmailComAnexos({
-    destinatario: EMAIL_DESTINO_DOS_RELATORIOS,
-    assunto: `Relatórios ShoppingHub — ${nomeDoShopping} (${periodoFormatado})`,
-    corpoHtml: `
-      <p>Relatórios automáticos de <strong>${nomeDoShopping}</strong>, período de ${periodoFormatado}:</p>
-      <ul>
-        <li>Menções de Story recebidas e republicadas (${mencoes?.length ?? 0} no total)</li>
-        <li>Atendimentos feitos pela IA</li>
-      </ul>
-      <p>Os dois vão em anexo, em CSV.</p>
-    `,
-    anexos: [
-      { nomeArquivo: `mencoes_${nomeArquivo}`, conteudoCSV: csv },
-      { nomeArquivo: `atendimentos_${nomeArquivo}`, conteudoCSV: csvDeAtendimentos },
-    ],
-  });
+  // E-mail é "melhor esforço" — se falhar, só loga (ver enviarEmailComAnexos): o ciclo já foi
+  // registrado acima, então essa exportação não deve ser tentada de novo por causa disso.
+  await enviarRelatoriosPorEmail(admin, shoppingId, periodoInicio, periodoFim);
 }

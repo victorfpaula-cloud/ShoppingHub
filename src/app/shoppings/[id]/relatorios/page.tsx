@@ -1,5 +1,4 @@
 import { criarClienteAdmin } from "@/lib/supabase/admin";
-import { BUCKET_RELATORIOS } from "@/lib/relatorios";
 import { inicioDoDiaBrasiliaISO } from "@/lib/mencoes";
 import { DiaDeMencoesAccordion } from "@/components/DiaDeMencoesAccordion";
 
@@ -13,15 +12,6 @@ function formatarDataLonga(iso: string): string {
     weekday: "long",
     day: "2-digit",
     month: "long",
-  }).format(new Date(iso));
-}
-
-function formatarDataCurta(iso: string): string {
-  return new Intl.DateTimeFormat("pt-BR", {
-    timeZone: "America/Sao_Paulo",
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
   }).format(new Date(iso));
 }
 
@@ -53,7 +43,7 @@ export default async function RelatoriosDeMencoesPage({
   searchParams,
 }: {
   params: { id: string };
-  searchParams: { periodo?: string };
+  searchParams: { periodo?: string; email?: string };
 }) {
   const admin = criarClienteAdmin();
 
@@ -126,22 +116,6 @@ export default async function RelatoriosDeMencoesPage({
   }
   const diasOrdenados = Array.from(porDia.keys()).sort((a, b) => (a < b ? 1 : -1));
 
-  // ---- Exportações automáticas (a cada 30 dias) ----
-  const { data: exportacoes } = await admin
-    .from("shoppinghub_exportacoes_mencoes")
-    .select("id, periodo_inicio, periodo_fim, storage_path, total_mencoes, created_at")
-    .eq("shopping_id", params.id)
-    .order("periodo_fim", { ascending: false });
-
-  const caminhos = (exportacoes ?? []).map((e) => e.storage_path);
-  const { data: urlsAssinadas } =
-    caminhos.length > 0
-      ? await admin.storage.from(BUCKET_RELATORIOS).createSignedUrls(caminhos, 60 * 60)
-      : { data: [] as { path: string | null; signedUrl: string }[] };
-  const urlPorCaminho = new Map(
-    (urlsAssinadas ?? []).filter((u) => u.path).map((u) => [u.path as string, u.signedUrl])
-  );
-
   return (
     <div>
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -151,7 +125,7 @@ export default async function RelatoriosDeMencoesPage({
             Visão geral de todas as menções de Story recebidas e republicadas, por loja e por dia.
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
           <a
             href={`/api/shoppings/${params.id}/relatorios/exportar?dias=15`}
             className="rounded-[9px] border border-white/14 px-3.5 py-2 text-xs font-semibold text-neutral-200 hover:bg-white/5"
@@ -164,8 +138,34 @@ export default async function RelatoriosDeMencoesPage({
           >
             Exportar últimos 30 dias
           </a>
+          <form action={`/api/shoppings/${params.id}/relatorios/enviar-email`} method="POST">
+            <button
+              type="submit"
+              className="flex items-center gap-1.5 rounded-[9px] bg-accent px-3.5 py-2 text-xs font-bold text-white shadow-[0_8px_20px_-8px_rgba(124,110,242,0.55)] transition hover:bg-accent-strong"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 4h16v16H4z" opacity="0" />
+                <path d="M22 6l-10 7L2 6" />
+                <path d="M2 6h20v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6Z" />
+              </svg>
+              Enviar por e-mail (últimos 30 dias)
+            </button>
+          </form>
         </div>
       </div>
+
+      {searchParams.email === "enviado" && (
+        <div className="mt-4 rounded-xl border border-ok/25 bg-ok/10 px-4 py-2.5 text-sm text-ok">
+          Relatórios enviados por e-mail com sucesso.
+        </div>
+      )}
+
+      {searchParams.email === "erro" && (
+        <div className="mt-4 rounded-xl border border-danger/30 bg-danger/10 px-4 py-2.5 text-sm text-danger">
+          Não foi possível enviar o e-mail. Confira se a RESEND_API_KEY está configurada
+          corretamente e veja os logs da Vercel pra mais detalhes.
+        </div>
+      )}
 
       {/* Resumo do período escolhido */}
       <div className="mt-7 rounded-2xl border border-white/8 bg-ink-900 p-5">
@@ -238,7 +238,8 @@ export default async function RelatoriosDeMencoesPage({
           Detalhamento diário (últimos {DIAS_NO_DETALHAMENTO} dias)
         </h3>
         <p className="mt-1 text-xs text-neutral-500">
-          Histórico mais antigo continua disponível nos arquivos exportados, logo abaixo.
+          Os relatórios completos (menções e atendimentos) chegam por e-mail a cada 30 dias — ou
+          na hora, pelo botão "Enviar por e-mail" ali em cima.
         </p>
 
         <div className="mt-3.5 flex flex-col gap-2.5">
@@ -258,51 +259,6 @@ export default async function RelatoriosDeMencoesPage({
           {diasOrdenados.length === 0 && (
             <p className="rounded-2xl border border-dashed border-white/12 px-4 py-6 text-center text-sm text-neutral-400">
               Nenhuma menção nos últimos {DIAS_NO_DETALHAMENTO} dias.
-            </p>
-          )}
-        </div>
-      </div>
-
-      {/* Exportações automáticas */}
-      <div className="mt-9">
-        <h3 className="text-[13.5px] font-bold text-neutral-200">Exportações automáticas</h3>
-        <p className="mt-1 text-xs text-neutral-500">
-          Um arquivo CSV é gerado sozinho a cada 30 dias com o histórico completo do período — dá
-          pra abrir no Excel/Google Sheets. Os links de download valem por 1 hora depois de abrir
-          essa página.
-        </p>
-
-        <div className="mt-3.5 flex flex-col gap-2.5">
-          {(exportacoes ?? []).map((exp) => (
-            <div
-              key={exp.id}
-              className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/8 bg-ink-900 px-4 py-3.5"
-            >
-              <div>
-                <p className="text-[13px] font-semibold text-neutral-200">
-                  {formatarDataCurta(exp.periodo_inicio)} – {formatarDataCurta(exp.periodo_fim)}
-                </p>
-                <p className="mt-0.5 text-xs text-neutral-500">
-                  {exp.total_mencoes} menç{exp.total_mencoes === 1 ? "ão" : "ões"} nesse período
-                </p>
-              </div>
-              {urlPorCaminho.get(exp.storage_path) ? (
-                <a
-                  href={urlPorCaminho.get(exp.storage_path) ?? undefined}
-                  className="shrink-0 rounded-[9px] border border-white/14 px-3.5 py-1.5 text-xs font-semibold text-neutral-200 hover:bg-white/5"
-                >
-                  Baixar CSV
-                </a>
-              ) : (
-                <span className="shrink-0 text-xs text-neutral-500">Link indisponível</span>
-              )}
-            </div>
-          ))}
-
-          {(exportacoes ?? []).length === 0 && (
-            <p className="rounded-2xl border border-dashed border-white/12 px-4 py-6 text-center text-sm text-neutral-400">
-              Ainda não passou o primeiro ciclo de 30 dias — a primeira exportação aparece aqui
-              automaticamente.
             </p>
           )}
         </div>

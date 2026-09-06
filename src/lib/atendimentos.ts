@@ -27,18 +27,20 @@ type MensagemDoAtendimento = {
   created_at: string;
 };
 
-/**
- * Gera o CSV de atendimentos (mensagens recebidas/respondidas pela IA) de um shopping num período —
- * mesma lógica usada tanto pela exportação manual (api/shoppings/[id]/atendimentos/exportar) quanto
- * pela exportação automática a cada 30 dias (ver exportarRelatoriosDevidos em relatorios.ts), pra
- * não duplicar as consultas.
- */
-export async function gerarCsvDeAtendimentos(
+export type ResumoDeAtendimentos = {
+  recebidas: number;
+  respondidas: number;
+  clientesUnicos: number;
+  lojasAcionadas: number;
+  ranking: { nome: string; total: number }[];
+};
+
+async function buscarMensagensDoPeriodo(
   admin: SupabaseClient,
   shoppingId: string,
   desde: Date,
   ate: Date
-): Promise<string> {
+): Promise<{ mensagens: MensagemDoAtendimento[]; nomePorLoja: Map<string, string> }> {
   const { data: contas } = await admin
     .from("shoppinghub_contas")
     .select("id")
@@ -65,36 +67,68 @@ export async function gerarCsvDeAtendimentos(
       : { data: [] as { id: string; nome: string }[] };
   const nomePorLoja = new Map((lojas ?? []).map((l) => [l.id, l.nome]));
 
-  const recebidas = todasAsMensagens.filter((m) => m.direcao === "recebida");
-  const respondidas = todasAsMensagens.filter((m) => m.direcao === "enviada");
+  return { mensagens: todasAsMensagens, nomePorLoja };
+}
+
+function calcularResumo(
+  mensagens: MensagemDoAtendimento[],
+  nomePorLoja: Map<string, string>
+): ResumoDeAtendimentos {
+  const recebidas = mensagens.filter((m) => m.direcao === "recebida");
+  const respondidas = mensagens.filter((m) => m.direcao === "enviada");
   const clientesUnicos = new Set(recebidas.map((m) => m.instagram_scoped_id)).size;
   const lojasAcionadas = new Set(recebidas.map((m) => m.loja_id).filter(Boolean)).size;
 
-  const mensagensPorLoja = new Map<string, number>();
+  const porLoja = new Map<string, number>();
   for (const m of recebidas) {
     if (!m.loja_id) continue;
-    mensagensPorLoja.set(m.loja_id, (mensagensPorLoja.get(m.loja_id) ?? 0) + 1);
+    porLoja.set(m.loja_id, (porLoja.get(m.loja_id) ?? 0) + 1);
   }
-  const ranking = Array.from(mensagensPorLoja.entries())
+  const ranking = Array.from(porLoja.entries())
     .map(([lojaId, total]) => ({ nome: nomePorLoja.get(lojaId) ?? "Loja removida", total }))
     .sort((a, b) => b.total - a.total);
 
-  const resumo = [
+  return {
+    recebidas: recebidas.length,
+    respondidas: respondidas.length,
+    clientesUnicos,
+    lojasAcionadas,
+    ranking,
+  };
+}
+
+function montarLinhasDeResumo(resumo: ResumoDeAtendimentos): string[] {
+  const linhas = [
     "Resumo do período",
-    `Mensagens recebidas,${recebidas.length}`,
-    `Mensagens respondidas,${respondidas.length}`,
-    `Clientes únicos,${clientesUnicos}`,
-    `Lojistas acionados,${lojasAcionadas}`,
+    `Mensagens recebidas,${resumo.recebidas}`,
+    `Mensagens respondidas,${resumo.respondidas}`,
+    `Clientes únicos,${resumo.clientesUnicos}`,
+    `Lojistas acionados,${resumo.lojasAcionadas}`,
   ];
-  if (ranking.length > 0) {
-    resumo.push("", "Atendimentos por loja no período");
-    for (const linha of ranking) {
-      resumo.push([escaparCampoCSV(linha.nome), String(linha.total)].join(","));
+  if (resumo.ranking.length > 0) {
+    linhas.push("", "Atendimentos por loja no período");
+    for (const linha of resumo.ranking) {
+      linhas.push([escaparCampoCSV(linha.nome), String(linha.total)].join(","));
     }
   }
+  return linhas;
+}
+
+/**
+ * CSV completo (resumo + mensagem por mensagem) — usado pela exportação manual em
+ * api/shoppings/[id]/atendimentos/exportar, pra quem quer o detalhe linha a linha.
+ */
+export async function gerarCsvDeAtendimentos(
+  admin: SupabaseClient,
+  shoppingId: string,
+  desde: Date,
+  ate: Date
+): Promise<string> {
+  const { mensagens, nomePorLoja } = await buscarMensagensDoPeriodo(admin, shoppingId, desde, ate);
+  const resumo = calcularResumo(mensagens, nomePorLoja);
 
   const cabecalho = ["Cliente", "Usuario", "Loja", "Direcao", "Mensagem", "Data_e_hora"];
-  const linhas = todasAsMensagens.map((m) =>
+  const linhas = mensagens.map((m) =>
     [
       m.cliente_nome ?? "Cliente",
       m.cliente_username ? `@${m.cliente_username}` : "",
@@ -108,5 +142,19 @@ export async function gerarCsvDeAtendimentos(
   );
 
   // BOM no início — sem isso o Excel abre acentos quebrados em CSV UTF-8.
-  return "﻿" + [...resumo, "", cabecalho.join(","), ...linhas].join("\n");
+  return "﻿" + [...montarLinhasDeResumo(resumo), "", cabecalho.join(","), ...linhas].join("\n");
+}
+
+/**
+ * Só o resumo (sem a lista de mensagens) — usado pelo PDF que vai por e-mail (ver
+ * gerarPdfDeAtendimentos em pdfRelatorio.ts), que mostra só os números e o ranking por loja.
+ */
+export async function buscarResumoDeAtendimentos(
+  admin: SupabaseClient,
+  shoppingId: string,
+  desde: Date,
+  ate: Date
+): Promise<ResumoDeAtendimentos> {
+  const { mensagens, nomePorLoja } = await buscarMensagensDoPeriodo(admin, shoppingId, desde, ate);
+  return calcularResumo(mensagens, nomePorLoja);
 }
