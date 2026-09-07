@@ -27,22 +27,67 @@ export async function GET(request: NextRequest) {
 
   const admin = criarClienteAdmin();
 
-  const { data: mencoesPendentes, error } = await admin
-    .from("shoppinghub_mencoes")
-    .select("id, conta_id, loja_id, storage_path, instagram_username, tentativas")
-    .eq("status", "pendente")
-    .not("storage_path", "is", null)
-    .order("recebido_em", { ascending: true });
+  // Quantas vezes tenta sozinho antes de desistir e deixar em "erro" pra ação manual (botão de
+  // "Tentar novamente" ou "Excluir" na Fila de Menções) — com o cron rodando de 5 em 5 minutos,
+  // isso já cobre falha passageira (rede, instabilidade momentânea da Meta) sem martelar pra
+  // sempre um item permanentemente quebrado (conta desativada, mídia inválida etc.).
+  const MAX_TENTATIVAS_AUTOMATICAS = 3;
 
-  if (error) {
-    console.error("Falha ao buscar menções pendentes:", error);
-    return NextResponse.json({ ok: false, erro: error.message }, { status: 500 });
+  // "Visibility timeout": uma menção em "publicando" só pode ser tentada de novo depois desse
+  // prazo — bem mais generoso que qualquer publicação real (pior caso ~48s de vídeo, ver
+  // PRAZO_MS_VIDEO abaixo), pra cobrir também a demora de a Vercel congelar/retomar a function.
+  // Existe pra evitar publicar a MESMA Story duas vezes: sem isso, uma execução que desiste de
+  // esperar uma menção (só localmente — a chamada real pra Meta pode continuar rodando sozinha,
+  // ver comPrazo mais abaixo) deixava a menção livre pra ser pega de novo já na PRÓXIMA execução
+  // do cron, 5 minutos depois — e se a tentativa antiga acabasse tendo sucesso mais tarde, as
+  // duas publicavam de verdade (visto em produção em 06/09/2026, ~1h de intervalo entre as duas
+  // publicações da mesma menção, embora só uma tenha ficado registrada no nosso relatório).
+  const PRAZO_DE_SEGURANCA_MS = 10 * 60 * 1000;
+  const limiteDeSeguranca = new Date(Date.now() - PRAZO_DE_SEGURANCA_MS).toISOString();
+
+  // Itens presos em "publicando" há mais tempo que o prazo de segurança E que já esgotaram as
+  // tentativas não devem ser reclamados de novo — a Meta provavelmente nunca respondeu (ou
+  // respondeu e não temos como saber), então vira "erro" pra ação manual em vez de tentar pra
+  // sempre.
+  await admin
+    .from("shoppinghub_mencoes")
+    .update({ status: "erro" })
+    .eq("status", "publicando")
+    .gte("tentativas", MAX_TENTATIVAS_AUTOMATICAS)
+    .lt("tentativa_iniciada_em", limiteDeSeguranca);
+
+  // Duas buscas separadas (em vez de um único `.or()` com `and()` aninhado) — mais fácil de
+  // revisar/confiar do que montar a string de filtro do PostgREST na mão pra algo que decide se a
+  // gente publica ou não uma Story de novo.
+  const colunas = "id, conta_id, loja_id, storage_path, instagram_username, tentativas, recebido_em";
+  const [{ data: pendentes, error: erroPendentes }, { data: reclamaveis, error: erroReclamaveis }] =
+    await Promise.all([
+      admin.from("shoppinghub_mencoes").select(colunas).eq("status", "pendente").not("storage_path", "is", null),
+      admin
+        .from("shoppinghub_mencoes")
+        .select(colunas)
+        .eq("status", "publicando")
+        .lt("tentativa_iniciada_em", limiteDeSeguranca)
+        .not("storage_path", "is", null),
+    ]);
+
+  if (erroPendentes || erroReclamaveis) {
+    console.error("Falha ao buscar menções pendentes:", erroPendentes ?? erroReclamaveis);
+    return NextResponse.json(
+      { ok: false, erro: (erroPendentes ?? erroReclamaveis)?.message },
+      { status: 500 }
+    );
   }
+
+  const mencoesPendentes = [...(pendentes ?? []), ...(reclamaveis ?? [])].sort(
+    (a, b) => new Date(a.recebido_em ?? 0).getTime() - new Date(b.recebido_em ?? 0).getTime()
+  );
 
   const resultado = {
     publicadas: 0,
     falhas: 0,
     adiadas: 0,
+    emDuvida: 0,
     total: mencoesPendentes?.length ?? 0,
   };
 
@@ -61,12 +106,6 @@ export async function GET(request: NextRequest) {
   const TEMPO_TOTAL_DISPONIVEL_MS = 55_000; // um pouco abaixo dos 60s da Vercel, sobra pra limpeza/exportação do final
   const PRAZO_MS_VIDEO = 48_000;
   const PRAZO_MS_IMAGEM = 15_000;
-
-  // Quantas vezes tenta sozinho antes de desistir e deixar em "erro" pra ação manual (botão de
-  // "Tentar novamente" ou "Excluir" na Fila de Menções) — com o cron rodando de 5 em 5 minutos,
-  // isso já cobre falha passageira (rede, instabilidade momentânea da Meta) sem martelar pra
-  // sempre um item permanentemente quebrado (conta desativada, mídia inválida etc.).
-  const MAX_TENTATIVAS_AUTOMATICAS = 3;
 
   // Publica vários itens ao mesmo tempo em vez de um por um — a maior parte do tempo de um vídeo é
   // espera passiva pela Meta processar (I/O, não CPU nossa), então rodar 3 ao mesmo tempo não
@@ -88,27 +127,57 @@ export async function GET(request: NextRequest) {
         continue;
       }
 
+      // "Reivindica" a menção ANTES de chamar a Meta — marca como "publicando" com um guard que só
+      // deixa passar se ainda estiver "pendente" (primeira tentativa) ou "publicando" mas já além
+      // do prazo de segurança (reclamada de uma tentativa anterior que nunca confirmou o próprio
+      // fim). Se 0 linhas forem afetadas, outra execução concorrente já pegou esse item primeiro —
+      // pula sem contar como falha. Isso garante que NUNCA duas execuções chamem a Meta pra
+      // publicar a mesma menção ao mesmo tempo (ver PRAZO_DE_SEGURANCA_MS acima).
+      const tentativaAtual = mencao.tentativas + 1;
+      const { data: reivindicada } = await admin
+        .from("shoppinghub_mencoes")
+        .update({ status: "publicando", tentativa_iniciada_em: new Date().toISOString(), tentativas: tentativaAtual })
+        .eq("id", mencao.id)
+        .in("status", ["pendente", "publicando"])
+        .select("id")
+        .maybeSingle();
+
+      if (!reivindicada) continue;
+
+      // Cancela as chamadas HTTP de verdade (não só a espera local) assim que o prazo estourar —
+      // ver comentário em publicarStoryNoInstagram (metaMessaging.ts) sobre por que isso importa.
+      const controleDeCancelamento = new AbortController();
+
       try {
-        await comPrazo(publicarMencao(admin, mencao), prazoDoItem);
+        await comPrazo(
+          publicarMencao(admin, mencao, controleDeCancelamento.signal),
+          prazoDoItem,
+          () => controleDeCancelamento.abort()
+        );
         resultado.publicadas += 1;
       } catch (erro) {
         console.error(`Falha ao publicar menção ${mencao.id}:`, erro);
-        const tentativas = mencao.tentativas + 1;
-        const novoStatus = tentativas < MAX_TENTATIVAS_AUTOMATICAS ? "pendente" : "erro";
-        // `comPrazo` só desiste de ESPERAR — não cancela a publicação em si, que continua rodando
-        // sozinha depois do catch. Se ela terminar com sucesso só um instante depois de "perder a
-        // corrida" pro prazo, a atualização de sucesso (status "publicado" + publicado_em) e essa
-        // atualização de falha aqui podem chegar ao banco em qualquer ordem. O `.eq("status",
-        // "pendente")` faz essa gravação de falha só valer se a menção AINDA estiver pendente —
-        // se o sucesso atrasado já tiver marcado como "publicado", essa gravação vira um no-op em
-        // vez de reverter o status por cima (visto em produção em 06/09/2026: menção com
-        // publicado_em preenchido mas status voltando pra "pendente").
-        await admin
-          .from("shoppinghub_mencoes")
-          .update({ status: novoStatus, tentativas })
-          .eq("id", mencao.id)
-          .eq("status", "pendente");
-        resultado.falhas += 1;
+
+        const foiNossoPrazoQueEstourou = erro instanceof Error && erro.message.startsWith("Excedeu o prazo de");
+
+        if (foiNossoPrazoQueEstourou) {
+          // Não sabemos com certeza se a chamada cancelada acima realmente parou a tempo do lado
+          // da Meta ou não — por segurança, deixa em "publicando" (a tentativa já foi contada na
+          // reivindicação acima) em vez de liberar pra tentar de novo imediatamente. Só volta a
+          // ficar elegível depois do PRAZO_DE_SEGURANCA_MS, ou vira "erro" direto se essa já foi a
+          // última tentativa permitida (ver limpeza no início da função).
+          resultado.emDuvida += 1;
+        } else {
+          // Erro de verdade (não foi timeout nosso) — a Meta respondeu com uma falha real antes do
+          // prazo, então é seguro liberar pra tentar de novo já.
+          const novoStatus = tentativaAtual < MAX_TENTATIVAS_AUTOMATICAS ? "pendente" : "erro";
+          await admin
+            .from("shoppinghub_mencoes")
+            .update({ status: novoStatus })
+            .eq("id", mencao.id)
+            .eq("status", "publicando");
+          resultado.falhas += 1;
+        }
       }
     }
   }
@@ -130,9 +199,10 @@ export async function GET(request: NextRequest) {
 // travado (por exemplo a Meta nunca respondendo) ficaria preso até a própria Vercel matar a
 // function inteira sem aviso (ver comentário acima, no início do arquivo); com isso, vira uma
 // falha comum, tratada pelo catch do loop, com uma mensagem de erro clara.
-function comPrazo<T>(promessa: Promise<T>, ms: number): Promise<T> {
+function comPrazo<T>(promessa: Promise<T>, ms: number, aoEsgotar?: () => void): Promise<T> {
   return new Promise((resolve, reject) => {
     const temporizador = setTimeout(() => {
+      aoEsgotar?.();
       reject(new Error(`Excedeu o prazo de ${ms}ms.`));
     }, ms);
 
@@ -157,7 +227,8 @@ async function publicarMencao(
     loja_id: string;
     storage_path: string | null;
     instagram_username: string | null;
-  }
+  },
+  signal: AbortSignal
 ) {
   if (!mencao.storage_path) {
     throw new Error("Menção sem storage_path.");
@@ -183,7 +254,8 @@ async function publicarMencao(
     conta.instagram_user_id,
     urlPublica.publicUrl,
     tipoDeMidia,
-    mencao.instagram_username
+    mencao.instagram_username,
+    signal
   );
 
   console.log(

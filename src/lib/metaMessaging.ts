@@ -144,7 +144,8 @@ export async function baixarMidiaDoStory(
 async function aguardarContainerPronto(
   containerId: string,
   tokenDaConta: string,
-  tipoDeMidia: "IMAGE" | "VIDEO"
+  tipoDeMidia: "IMAGE" | "VIDEO",
+  signal?: AbortSignal
 ): Promise<void> {
   // Vídeo demora bem mais que imagem pra Meta processar (transcodificação) — um orçamento curto
   // demais faz o container ainda estar em progresso quando desistimos, e a menção erra à toa
@@ -165,7 +166,7 @@ async function aguardarContainerPronto(
       `https://graph.facebook.com/${GRAPH_API_VERSION}/${containerId}?fields=status_code,status&access_token=${encodeURIComponent(
         tokenDaConta
       )}`,
-      { cache: "no-store" }
+      { cache: "no-store", signal }
     );
 
     ultimaRespostaBruta = await resposta.text().catch(() => ultimaRespostaBruta);
@@ -215,13 +216,22 @@ async function aguardarContainerPronto(
  * um "chip" com o nome da conta marcada e uma seta pra abrir o perfil dela (parecido com uma
  * marcação de local). Ele mostra o NOME de exibição configurado no perfil da loja, não o
  * `@usuário` — isso é a própria Meta que decide como desenhar, não dá pra mudar por aqui.
+ *
+ * `signal`, quando informado, cancela as três chamadas HTTP (criação do container, espera pelo
+ * `FINISHED` e publicação em si) assim que o chamador desistir de esperar — ver comPrazo em
+ * api/cron/publicar-mencoes/route.ts. Sem isso, quando o cron desiste de esperar uma menção, essa
+ * chamada continuava rodando sozinha em segundo plano e podia terminar de publicar de verdade só
+ * um bom tempo depois (~1h, visto em produção em 06/09/2026) — como o cron já tinha marcado a
+ * menção como erro/pendente nesse meio tempo, ela era tentada de novo e acabava publicada DUAS
+ * vezes na Story real do Instagram, mesmo aparecendo só uma vez nos nossos relatórios.
  */
 export async function publicarStoryNoInstagram(
   tokenDaConta: string,
   instagramUserId: string,
   urlPublicaDaMidia: string,
   tipoDeMidia: "IMAGE" | "VIDEO",
-  usernameParaMarcar?: string | null
+  usernameParaMarcar?: string | null,
+  signal?: AbortSignal
 ): Promise<string> {
   const camposDeMidia =
     tipoDeMidia === "VIDEO" ? { video_url: urlPublicaDaMidia } : { image_url: urlPublicaDaMidia };
@@ -259,6 +269,7 @@ export async function publicarStoryNoInstagram(
         access_token: tokenDaConta,
       }),
       cache: "no-store",
+      signal,
     }
   );
 
@@ -283,7 +294,7 @@ export async function publicarStoryNoInstagram(
     throw new Error("A Meta não devolveu um ID de container ao criar a Story.");
   }
 
-  await aguardarContainerPronto(containerId, tokenDaConta, tipoDeMidia);
+  await aguardarContainerPronto(containerId, tokenDaConta, tipoDeMidia, signal);
 
   const respostaPublicacao = await fetch(
     `https://graph.facebook.com/${GRAPH_API_VERSION}/${instagramUserId}/media_publish`,
@@ -295,6 +306,7 @@ export async function publicarStoryNoInstagram(
         access_token: tokenDaConta,
       }),
       cache: "no-store",
+      signal,
     }
   );
 
