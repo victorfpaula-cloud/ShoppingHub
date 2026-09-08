@@ -31,6 +31,14 @@ export async function POST(request: NextRequest) {
   const assinatura = request.headers.get("x-hub-signature-256");
 
   if (!assinaturaValida(corpoBruto, assinatura)) {
+    // Log temporário de diagnóstico (08/09/2026, ver processarEventoDeMensagem) — se um payload de
+    // eco (is_echo) estiver sendo rejeitado bem aqui, o problema é a assinatura vir de um produto/
+    // segredo diferente dos dois já conferidos em assinaturaValida, não a lógica da pausa em si.
+    console.warn(
+      `Assinatura inválida rejeitou um payload${
+        corpoBruto.includes('"is_echo"') ? " que PARECE ser um eco (contém is_echo)" : ""
+      }.`
+    );
     return new NextResponse("Assinatura inválida.", { status: 403 });
   }
 
@@ -63,7 +71,15 @@ export async function POST(request: NextRequest) {
 async function processarEventoDeMensagem(admin: ReturnType<typeof criarClienteAdmin>, evento: any) {
   const mensagem = evento?.message;
 
+  // Log temporário de diagnóstico (08/09/2026) — a pausa automática por intervenção manual não
+  // disparou em produção depois de implementada. Antes de mexer mais no código, precisamos
+  // confirmar o que a Meta está de fato mandando: se esse evento nem aparece no log, a Meta não
+  // está entregando eco nenhum pra mensagem mandada manualmente pelo app (aí o problema é de
+  // permissão/plataforma, não do nosso código); se aparece só com is_echo ausente ou com
+  // sender/recipient diferentes do esperado, é a nossa leitura do payload que está errada. Tirar
+  // esse log assim que a causa for confirmada.
   if (mensagem?.is_echo) {
+    console.log("Evento de eco recebido (bruto):", JSON.stringify(evento));
     await tratarEcoDeMensagemEnviada(admin, evento, mensagem);
     return;
   }
@@ -306,7 +322,12 @@ async function tratarEcoDeMensagemEnviada(
   const idDaContaQueEnviou: string | undefined = evento?.sender?.id;
   const textoDaMensagem: string | undefined = mensagem?.text;
 
-  if (!idDaMensagem || !idDoCliente || !idDaContaQueEnviou) return;
+  if (!idDaMensagem || !idDoCliente || !idDaContaQueEnviou) {
+    console.warn(
+      `Eco descartado por falta de campo (mid=${idDaMensagem}, recipient=${idDoCliente}, sender=${idDaContaQueEnviou}) — ver payload bruto logado acima.`
+    );
+    return;
+  }
 
   const { error: erroAoRegistrar } = await admin
     .from("shoppinghub_processed_messages")
@@ -328,7 +349,10 @@ async function tratarEcoDeMensagemEnviada(
     .eq("message_id", idDaMensagem)
     .maybeSingle();
 
-  if (jaEnviadaPeloBot) return;
+  if (jaEnviadaPeloBot) {
+    console.log(`Eco de mensagem já enviada pelo próprio bot (mid=${idDaMensagem}) — ignorado.`);
+    return;
+  }
 
   const { data: conta } = await admin
     .from("shoppinghub_contas")
@@ -337,7 +361,12 @@ async function tratarEcoDeMensagemEnviada(
     .eq("active", true)
     .maybeSingle();
 
-  if (!conta) return;
+  if (!conta) {
+    console.warn(
+      `Eco de conta não encontrada/inativa (instagram_user_id=${idDaContaQueEnviou}) — verifique se sender/recipient não estão invertidos nesse payload.`
+    );
+    return;
+  }
 
   console.log(
     `Mensagem enviada manualmente pelo Instagram (fora do bot) pra ${idDoCliente} — pausando o bot nessa conversa.`
