@@ -88,40 +88,41 @@ export default async function LojasDoShoppingPage({
   // igual ao limite diário de menções por loja.
   const inicioDoDia = inicioDoDiaBrasiliaISO();
 
-  const { data: mencoesPublicadasHoje } =
-    idsDasLojas.length > 0
-      ? await admin
+  // As três buscas abaixo são independentes entre si (nenhuma usa o resultado da outra, só
+  // idsDasLojas) — rodam em paralelo em vez de uma atrás da outra, então o tempo de espera vira o
+  // da mais lenta, não a soma das três.
+  const [
+    { data: mencoesPublicadasHoje },
+    { data: mencoesComErro },
+    { data: ultimaPublicacaoLinha },
+  ] = idsDasLojas.length > 0
+    ? await Promise.all([
+        admin
           .from("shoppinghub_mencoes")
           .select("loja_id")
           .in("loja_id", idsDasLojas)
           .eq("status", "publicado")
-          .gte("publicado_em", inicioDoDia)
-      : { data: [] as { loja_id: string }[] };
-
-  // Badge por loja mostra quantas publicações saíram HOJE e, se tiver alguma com erro, avisa isso
-  // também — os dois contadores por loja vêm dessas duas buscas.
-  const { data: mencoesComErro } =
-    idsDasLojas.length > 0
-      ? await admin
+          .gte("publicado_em", inicioDoDia),
+        // Badge por loja mostra quantas publicações saíram HOJE e, se tiver alguma com erro,
+        // avisa isso também — os dois contadores por loja vêm dessas duas buscas.
+        admin
           .from("shoppinghub_mencoes")
           .select("loja_id")
           .in("loja_id", idsDasLojas)
-          .eq("status", "erro")
-      : { data: [] as { loja_id: string }[] };
-
-  // Última publicação de qualquer loja do shopping, pra mostrar o horário junto do card de
-  // "Publicados hoje" (pedido em 06/09/2026) — pode ser de antes de hoje se nada saiu ainda hoje.
-  const { data: ultimaPublicacaoLinha } =
-    idsDasLojas.length > 0
-      ? await admin
+          .eq("status", "erro"),
+        // Última publicação de qualquer loja do shopping, pra mostrar o horário junto do card de
+        // "Publicados hoje" (pedido em 06/09/2026) — pode ser de antes de hoje se nada saiu ainda
+        // hoje.
+        admin
           .from("shoppinghub_mencoes")
           .select("publicado_em")
           .in("loja_id", idsDasLojas)
           .eq("status", "publicado")
           .order("publicado_em", { ascending: false })
           .limit(1)
-          .maybeSingle()
-      : { data: null };
+          .maybeSingle(),
+      ])
+    : [{ data: [] as { loja_id: string }[] }, { data: [] as { loja_id: string }[] }, { data: null }];
 
   function contarPorLoja(linhas: { loja_id: string }[]): Map<string, number> {
     const mapa = new Map<string, number>();

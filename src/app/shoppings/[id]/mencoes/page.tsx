@@ -36,32 +36,34 @@ export default async function FilaDeMencoesPage({
   const idsDasLojas = (lojas ?? []).map((l) => l.id);
   const nomePorLoja = new Map((lojas ?? []).map((l) => [l.id, l.nome]));
 
-  // ---- "Precisa de atenção": só pendente/erro, sem limite de data — é a razão da página existir
-  // (tudo o que já foi publicado é histórico, e histórico já é o trabalho da página de Relatórios).
-  // Mais antiga primeiro, pra quem está esperando há mais tempo aparecer no topo. ----
-  const { data: itensDeAtencao } =
-    idsDasLojas.length > 0
-      ? await admin
-          .from("shoppinghub_mencoes")
-          .select("id, loja_id, status, recebido_em, storage_path, tentativas")
-          .in("loja_id", idsDasLojas)
-          .in("status", ["pendente", "erro"])
-          .order("recebido_em", { ascending: true })
-          .limit(200)
-      : { data: [] as any[] };
-
-  // ---- "Hoje": só um resumo rápido do dia (publicadas + quantas caíram no limite diário), sem
-  // virar uma segunda página de histórico — quem quiser navegar dia a dia vai em Relatórios. ----
+  // As duas buscas abaixo (atenção + hoje) são independentes — nenhuma depende do resultado da
+  // outra, só de idsDasLojas — então rodam em paralelo em vez de em fila.
   const inicioDeHoje = inicioDoDiaBrasiliaISO();
-  const { data: mencoesDeHoje } =
+  const [{ data: itensDeAtencao }, { data: mencoesDeHoje }] =
     idsDasLojas.length > 0
-      ? await admin
-          .from("shoppinghub_mencoes")
-          .select("id, loja_id, status, publicado_em, thumbnail_path")
-          .in("loja_id", idsDasLojas)
-          .in("status", ["publicado", "descartado_limite"])
-          .gte("recebido_em", inicioDeHoje)
-      : { data: [] as any[] };
+      ? await Promise.all([
+          // "Precisa de atenção": só pendente/erro, sem limite de data — é a razão da página
+          // existir (tudo o que já foi publicado é histórico, e histórico já é o trabalho da
+          // página de Relatórios). Mais antiga primeiro, pra quem está esperando há mais tempo
+          // aparecer no topo.
+          admin
+            .from("shoppinghub_mencoes")
+            .select("id, loja_id, status, recebido_em, storage_path, tentativas")
+            .in("loja_id", idsDasLojas)
+            .in("status", ["pendente", "erro"])
+            .order("recebido_em", { ascending: true })
+            .limit(200),
+          // "Hoje": só um resumo rápido do dia (publicadas + quantas caíram no limite diário),
+          // sem virar uma segunda página de histórico — quem quiser navegar dia a dia vai em
+          // Relatórios.
+          admin
+            .from("shoppinghub_mencoes")
+            .select("id, loja_id, status, publicado_em, thumbnail_path")
+            .in("loja_id", idsDasLojas)
+            .in("status", ["publicado", "descartado_limite"])
+            .gte("recebido_em", inicioDeHoje),
+        ])
+      : [{ data: [] as any[] }, { data: [] as any[] }];
 
   const publicadasHoje = (mencoesDeHoje ?? [])
     .filter((m) => m.status === "publicado")
