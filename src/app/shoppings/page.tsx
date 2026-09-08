@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { criarClienteAdmin } from "@/lib/supabase/admin";
 import { iniciaisDoNome } from "@/lib/iniciais";
 import { BotaoSair } from "./BotaoSair";
@@ -34,8 +35,7 @@ export default async function ShoppingsPage({
     <div>
       <div className="flex items-center justify-between border-b border-white/8 px-6 py-4 lg:px-12">
         <div className="flex items-center gap-2.5">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo-shoppinghub.png" alt="" className="h-7 w-7 object-contain" />
+          <Image src="/logo-shoppinghub.png" alt="" width={28} height={28} priority className="h-7 w-7 object-contain" />
           <span className="font-display text-[15px] font-bold tracking-tight">ShoppingHub</span>
         </div>
         <BotaoSair />

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { criarClienteNavegador } from "@/lib/supabase/client";
 
@@ -44,8 +45,14 @@ export default function LoginPage() {
                 className="absolute -inset-2.5 rounded-full opacity-50"
                 style={{ background: "radial-gradient(closest-side, rgba(124,110,242,0.45), transparent 70%)" }}
               />
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/logo-shoppinghub.png" alt="" className="relative h-14 w-14 object-contain" />
+              <Image
+                src="/logo-shoppinghub.png"
+                alt=""
+                width={56}
+                height={56}
+                priority
+                className="relative h-14 w-14 object-contain"
+              />
             </div>
             <div className="text-center">
               <div className="font-display text-[19px] font-bold tracking-tight">ShoppingHub</div>

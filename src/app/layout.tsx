@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Manrope, Space_Grotesk } from "next/font/google";
+import Image from "next/image";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -70,10 +71,12 @@ export default function RootLayout({
         >
           <div className="relative flex h-32 w-32 items-center justify-center">
             <div className="absolute inset-0 animate-spin rounded-full border-4 border-ink-900 border-t-accent" />
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
+            <Image
               src="/logo-shoppinghub.png"
               alt="ShoppingHub"
+              width={96}
+              height={96}
+              priority
               className="h-24 w-24 animate-pop-in object-contain"
             />
           </div>
