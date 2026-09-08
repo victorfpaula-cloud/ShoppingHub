@@ -27,6 +27,7 @@ export function AtendimentoAccordion({
   clienteUsername,
   totalMensagens,
   ultimaMensagemEmFormatada,
+  pausado,
 }: {
   shoppingId: string;
   instagramScopedId: string;
@@ -34,6 +35,7 @@ export function AtendimentoAccordion({
   clienteUsername: string | null;
   totalMensagens: number;
   ultimaMensagemEmFormatada: string;
+  pausado: boolean;
 }) {
   const [carregando, setCarregando] = useState(false);
   const [comErro, setComErro] = useState(false);
@@ -73,10 +75,34 @@ export function AtendimentoAccordion({
             Último contato em {ultimaMensagemEmFormatada}
           </p>
         </div>
-        <span className="shrink-0 rounded-full bg-white/8 px-2.5 py-1 text-[10.5px] font-semibold text-neutral-300">
-          {totalMensagens} mensagem{totalMensagens === 1 ? "" : "ns"}
-        </span>
+        <div className="flex shrink-0 items-center gap-1.5">
+          {pausado && (
+            <span className="rounded-full bg-warn/15 px-2.5 py-1 text-[10.5px] font-bold text-warn">
+              BOT PAUSADO
+            </span>
+          )}
+          <span className="rounded-full bg-white/8 px-2.5 py-1 text-[10.5px] font-semibold text-neutral-300">
+            {totalMensagens} mensagem{totalMensagens === 1 ? "" : "ns"}
+          </span>
+        </div>
       </summary>
+
+      {pausado && (
+        <div className="flex flex-wrap items-center justify-between gap-2.5 border-t border-white/8 bg-warn/[0.04] px-4 py-2.5">
+          <p className="text-[11.5px] text-warn">
+            Alguém respondeu essa conversa direto pelo Instagram — o bot está pausado aqui.
+          </p>
+          <form action={`/api/shoppings/${shoppingId}/atendimentos/retomar`} method="POST">
+            <input type="hidden" name="instagram_scoped_id" value={instagramScopedId} />
+            <button
+              type="submit"
+              className="shrink-0 rounded-[9px] border border-warn/40 bg-transparent px-3 py-1.5 text-xs font-semibold text-warn hover:bg-warn/10"
+            >
+              Retomar bot
+            </button>
+          </form>
+        </div>
+      )}
 
       {carregando && (
         <p className="border-t border-white/8 px-4 py-4 text-center text-xs text-neutral-500">

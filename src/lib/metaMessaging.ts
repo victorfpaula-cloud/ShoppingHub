@@ -54,11 +54,16 @@ export function assinaturaValida(corpoBruto: string, assinaturaRecebida: string 
  * próprio token) — não `/{page-id}/messages`, confirmado na documentação da Instagram Messaging
  * API.
  */
+/**
+ * Devolve o `message_id` (mid) que a Meta atribui à mensagem enviada — usado pra reconhecer o eco
+ * dela mesma quando volta pelo webhook (`is_echo`) e não confundir com uma mensagem mandada por um
+ * humano direto pelo Instagram (ver shoppinghub_conversas_pausadas, webhook/instagram/route.ts).
+ */
 export async function enviarMensagemDirect(
   tokenDaConta: string,
   igsidDoCliente: string,
   texto: string
-): Promise<void> {
+): Promise<{ messageId: string | null }> {
   const resposta = await fetch(
     `https://graph.facebook.com/${GRAPH_API_VERSION}/me/messages?access_token=${encodeURIComponent(
       tokenDaConta
@@ -74,12 +79,20 @@ export async function enviarMensagemDirect(
     }
   );
 
+  const corpoBruto = await resposta.text().catch(() => "");
+
   if (!resposta.ok) {
-    const corpoErro = await resposta.text().catch(() => "");
-    throw new Error(
-      `Falha ao enviar mensagem pro Direct (status ${resposta.status}): ${corpoErro}`
-    );
+    throw new Error(`Falha ao enviar mensagem pro Direct (status ${resposta.status}): ${corpoBruto}`);
   }
+
+  let dados: any = null;
+  try {
+    dados = JSON.parse(corpoBruto);
+  } catch {
+    // segue com dados null — não é crítico, só perde a chance de reconhecer o próprio eco depois
+  }
+
+  return { messageId: typeof dados?.message_id === "string" ? dados.message_id : null };
 }
 
 /**

@@ -11,6 +11,7 @@ type Atendimento = {
   clienteUsername: string | null;
   totalMensagens: number;
   ultimaMensagemEm: string;
+  pausado: boolean;
 };
 
 function formatarDataHora(iso: string): string {
@@ -54,19 +55,27 @@ export default async function AtendimentosPage({
 
   const contaIds = (contas ?? []).map((c) => c.id);
 
-  // Só o necessário pra montar a LISTA (nome, @usuário, quantas mensagens, último contato) — o
-  // texto de cada mensagem (potencialmente milhares de linhas com conteúdo longo) só é buscado sob
-  // demanda quando alguém abre a conversa de um cliente específico (ver AtendimentoAccordion +
-  // api/shoppings/[id]/atendimentos/conversa).
-  const { data: mensagens } =
+  // As duas buscas abaixo só dependem de contaIds, nenhuma da outra — rodam em paralelo.
+  const [{ data: mensagens }, { data: pausadas }] =
     contaIds.length > 0
-      ? await admin
-          .from("shoppinghub_mensagens")
-          .select("instagram_scoped_id, cliente_nome, cliente_username, created_at")
-          .in("conta_id", contaIds)
-          .order("created_at", { ascending: true })
-          .limit(5000)
-      : { data: [] as any[] };
+      ? await Promise.all([
+          // Só o necessário pra montar a LISTA (nome, @usuário, quantas mensagens, último
+          // contato) — o texto de cada mensagem (potencialmente milhares de linhas com conteúdo
+          // longo) só é buscado sob demanda quando alguém abre a conversa de um cliente
+          // específico (ver AtendimentoAccordion + api/shoppings/[id]/atendimentos/conversa).
+          admin
+            .from("shoppinghub_mensagens")
+            .select("instagram_scoped_id, cliente_nome, cliente_username, created_at")
+            .in("conta_id", contaIds)
+            .order("created_at", { ascending: true })
+            .limit(5000),
+          // Conversas em que um humano respondeu manualmente pelo Instagram — o bot fica pausado
+          // nelas até alguém clicar em "Retomar bot" (ver AtendimentoAccordion).
+          admin.from("shoppinghub_conversas_pausadas").select("instagram_scoped_id").in("conta_id", contaIds),
+        ])
+      : [{ data: [] as any[] }, { data: [] as { instagram_scoped_id: string }[] }];
+
+  const scopedIdsPausados = new Set((pausadas ?? []).map((p) => p.instagram_scoped_id));
 
   const porCliente = new Map<string, Atendimento>();
   for (const m of mensagens ?? []) {
@@ -79,6 +88,7 @@ export default async function AtendimentosPage({
         clienteUsername: m.cliente_username,
         totalMensagens: 1,
         ultimaMensagemEm: m.created_at,
+        pausado: scopedIdsPausados.has(m.instagram_scoped_id),
       });
     } else {
       existente.totalMensagens += 1;
@@ -173,6 +183,7 @@ export default async function AtendimentosPage({
                     clienteUsername={atendimento.clienteUsername}
                     totalMensagens={atendimento.totalMensagens}
                     ultimaMensagemEmFormatada={formatarDataHora(atendimento.ultimaMensagemEm)}
+                    pausado={atendimento.pausado}
                   />
                 ))}
               </div>

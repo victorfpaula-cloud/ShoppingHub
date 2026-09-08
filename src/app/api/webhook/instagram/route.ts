@@ -64,6 +64,7 @@ async function processarEventoDeMensagem(admin: ReturnType<typeof criarClienteAd
   const mensagem = evento?.message;
 
   if (mensagem?.is_echo) {
+    await tratarEcoDeMensagemEnviada(admin, evento, mensagem);
     return;
   }
 
@@ -181,6 +182,21 @@ async function processarEventoDeMensagem(admin: ReturnType<typeof criarClienteAd
     return;
   }
 
+  // Um humano já respondeu essa conversa direto pelo Instagram (fora do bot) — ver
+  // tratarEcoDeMensagemEnviada abaixo. A mensagem do cliente já ficou registrada (linha acima),
+  // só não gera nem manda resposta automática, pra não entrar no meio de um atendimento manual.
+  const { data: conversaPausada } = await admin
+    .from("shoppinghub_conversas_pausadas")
+    .select("conta_id")
+    .eq("conta_id", conta.id)
+    .eq("instagram_scoped_id", idDoCliente)
+    .maybeSingle();
+
+  if (conversaPausada) {
+    console.log(`Conversa com ${idDoCliente} está pausada (atendimento manual) — bot não responde.`);
+    return;
+  }
+
   const { data: shopping } = await admin
     .from("shoppinghub_shoppings")
     .select("nome, guardrails_texto")
@@ -256,7 +272,7 @@ async function processarEventoDeMensagem(admin: ReturnType<typeof criarClienteAd
     respostaGerada ??
     "Recebemos sua mensagem, mas tivemos um problema técnico pra responder agora. Vamos te retornar em breve.";
 
-  await enviarMensagemDirect(conta.access_token, idDoCliente, respostaFinal);
+  const { messageId } = await enviarMensagemDirect(conta.access_token, idDoCliente, respostaFinal);
 
   await admin.from("shoppinghub_mensagens").insert({
     conta_id: conta.id,
@@ -264,7 +280,83 @@ async function processarEventoDeMensagem(admin: ReturnType<typeof criarClienteAd
     direcao: "enviada",
     texto: respostaFinal,
     loja_id: lojaEscolhida?.id ?? null,
+    message_id: messageId,
   });
+}
+
+/**
+ * Eco de uma mensagem "enviada" pela conta do shopping — chega tanto quando é o PRÓPRIO bot (a
+ * Meta ecoa de volta a mensagem que `enviarMensagemDirect` acabou de mandar) quanto quando é um
+ * HUMANO respondendo direto pelo app do Instagram, por fora do bot. Só dá pra diferenciar pelo
+ * `mid`: se bate com um que a gente mesma registrou ao mandar, é o bot (só confirmação, nada a
+ * fazer); se não bate com nenhum, foi um humano — registra a mensagem (pra aparecer na aba
+ * Atendimentos) e PAUSA o bot nessa conversa específica, pra ele não entrar no meio de um
+ * atendimento que já está sendo feito na mão (pedido em 08/09/2026).
+ *
+ * Nos campos do evento, um eco vem com sender/recipient invertidos em relação a uma mensagem
+ * normal: quem "manda" é a própria conta do shopping, e quem recebe é o cliente.
+ */
+async function tratarEcoDeMensagemEnviada(
+  admin: ReturnType<typeof criarClienteAdmin>,
+  evento: any,
+  mensagem: any
+) {
+  const idDaMensagem: string | undefined = mensagem?.mid;
+  const idDoCliente: string | undefined = evento?.recipient?.id;
+  const idDaContaQueEnviou: string | undefined = evento?.sender?.id;
+  const textoDaMensagem: string | undefined = mensagem?.text;
+
+  if (!idDaMensagem || !idDoCliente || !idDaContaQueEnviou) return;
+
+  const { error: erroAoRegistrar } = await admin
+    .from("shoppinghub_processed_messages")
+    .insert({ message_id: idDaMensagem });
+
+  if (erroAoRegistrar) {
+    if ((erroAoRegistrar as any).code === "23505") return; // eco já processado antes
+    throw erroAoRegistrar;
+  }
+
+  // Risco residual aceito: se o eco chegar rápido demais, ainda ANTES da nossa própria gravação
+  // da mensagem "enviada" (linha logo depois de enviarMensagemDirect) terminar, esse SELECT não
+  // encontra nada e a conversa é pausada por engano, achando que foi um humano. Não tem perda de
+  // dado nem resposta errada — só teria que clicar em "Retomar bot" uma vez. Não vale complicar o
+  // código com retry/lock pra uma corrida rara com recuperação de um clique.
+  const { data: jaEnviadaPeloBot } = await admin
+    .from("shoppinghub_mensagens")
+    .select("id")
+    .eq("message_id", idDaMensagem)
+    .maybeSingle();
+
+  if (jaEnviadaPeloBot) return;
+
+  const { data: conta } = await admin
+    .from("shoppinghub_contas")
+    .select("id")
+    .eq("instagram_user_id", idDaContaQueEnviou)
+    .eq("active", true)
+    .maybeSingle();
+
+  if (!conta) return;
+
+  console.log(
+    `Mensagem enviada manualmente pelo Instagram (fora do bot) pra ${idDoCliente} — pausando o bot nessa conversa.`
+  );
+
+  await admin.from("shoppinghub_mensagens").insert({
+    conta_id: conta.id,
+    instagram_scoped_id: idDoCliente,
+    direcao: "enviada",
+    texto: textoDaMensagem ?? "[mensagem sem texto — áudio, imagem etc.]",
+    message_id: idDaMensagem,
+  });
+
+  await admin
+    .from("shoppinghub_conversas_pausadas")
+    .upsert(
+      { conta_id: conta.id, instagram_scoped_id: idDoCliente },
+      { onConflict: "conta_id,instagram_scoped_id" }
+    );
 }
 
 /**
