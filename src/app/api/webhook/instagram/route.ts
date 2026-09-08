@@ -1,12 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { criarClienteAdmin } from "@/lib/supabase/admin";
-import {
-  assinaturaValida,
-  buscarPerfilDoCliente,
-  enviarMensagemDirect,
-} from "@/lib/metaMessaging";
+import { assinaturaValida, enviarMensagemDirect } from "@/lib/metaMessaging";
 import { decidirLoja, responderComoLoja, type LojaComConhecimento } from "@/lib/triagem";
-import { processarMencaoRecebida } from "@/lib/mencoes";
+import { processarMencaoRecebida, buscarPerfilDoClienteComCache } from "@/lib/mencoes";
 
 // Sem isso, a Vercel usa o padrão de 10s — insuficiente pra baixar+comprimir um vídeo de menção
 // (ver comprimirVideo.ts, chamado dentro de processarMencaoRecebida), o que podia estourar
@@ -118,7 +114,7 @@ async function processarEventoDeMensagem(admin: ReturnType<typeof criarClienteAd
     return;
   }
 
-  const perfilDoCliente = await buscarPerfilDoCliente(conta.access_token, idDoCliente);
+  const perfilDoCliente = await buscarPerfilDoClienteComCache(admin, conta.access_token, idDoCliente);
 
   // Ignora completamente qualquer mensagem de uma conta cadastrada como @usuário autorizado de
   // alguma loja desse shopping — essas contas são lojistas, cadastradas só pra poder marcar o
@@ -289,7 +285,7 @@ async function processarMencaoDeStory(
     return;
   }
 
-  const perfil = await buscarPerfilDoCliente(conta.access_token, idDoCliente);
+  const perfil = await buscarPerfilDoClienteComCache(admin, conta.access_token, idDoCliente);
   const username = perfil.username?.toLowerCase();
 
   if (!username) {

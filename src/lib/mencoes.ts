@@ -1,8 +1,52 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import sharp from "sharp";
-import { baixarMidiaDoStory } from "./metaMessaging";
+import { baixarMidiaDoStory, buscarPerfilDoCliente } from "./metaMessaging";
 import { adicionarFaixaDeCredito, ehImagem } from "./creditoNaImagem";
 import { comprimirVideo } from "./comprimirVideo";
+
+const HORAS_DE_CACHE_DO_PERFIL = 24;
+
+/**
+ * Busca nome/@usuário do Instagram de quem mandou uma mensagem ou marcou o shopping num Story —
+ * cacheado por 24h em shoppinghub_perfis_instagram, em vez de perguntar pra Meta de novo a cada
+ * mensagem/menção da MESMA pessoa (nome/@usuário praticamente não muda de um dia pro outro; mesmo
+ * princípio usado no Chatbot Direct pra foto de perfil). Só isso fica com essa folga de até 24h —
+ * nenhuma mensagem, menção ou status de publicação passa por esse cache, só o nome exibido.
+ */
+export async function buscarPerfilDoClienteComCache(
+  admin: SupabaseClient,
+  tokenDaConta: string,
+  instagramScopedId: string
+): Promise<{ nome: string; username: string | null }> {
+  const { data: cache } = await admin
+    .from("shoppinghub_perfis_instagram")
+    .select("nome, username, atualizado_em")
+    .eq("instagram_scoped_id", instagramScopedId)
+    .maybeSingle();
+
+  const cacheAindaValido =
+    !!cache &&
+    Date.now() - new Date(cache.atualizado_em).getTime() < HORAS_DE_CACHE_DO_PERFIL * 60 * 60 * 1000;
+
+  if (cacheAindaValido) {
+    return { nome: cache.nome, username: cache.username };
+  }
+
+  const perfil = await buscarPerfilDoCliente(tokenDaConta, instagramScopedId);
+
+  const { error: erroAoGuardarCache } = await admin.from("shoppinghub_perfis_instagram").upsert({
+    instagram_scoped_id: instagramScopedId,
+    nome: perfil.nome,
+    username: perfil.username,
+    atualizado_em: new Date().toISOString(),
+  });
+
+  if (erroAoGuardarCache) {
+    console.error("Falha ao guardar cache de perfil do Instagram:", erroAoGuardarCache);
+  }
+
+  return perfil;
+}
 
 // Bucket público do Supabase Storage onde ficam guardadas as mídias baixadas de menções de Story
 // — precisa ser público porque a API de publicação de Stories da Meta exige uma `image_url`/
