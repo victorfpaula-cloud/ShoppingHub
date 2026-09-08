@@ -1,15 +1,9 @@
 import { criarClienteAdmin } from "@/lib/supabase/admin";
 import { diasDeRetencaoDeMensagens } from "@/lib/retencao";
 import { BotaoEnviarRelatorioPorEmail } from "@/components/BotaoEnviarRelatorioPorEmail";
+import { AtendimentoAccordion } from "@/components/AtendimentoAccordion";
 
 export const dynamic = "force-dynamic";
-
-type MensagemDoAtendimento = {
-  direcao: "recebida" | "enviada";
-  texto: string;
-  dataHora: string;
-  lojaNome: string | null;
-};
 
 type Atendimento = {
   instagramScopedId: string;
@@ -17,7 +11,6 @@ type Atendimento = {
   clienteUsername: string | null;
   totalMensagens: number;
   ultimaMensagemEm: string;
-  mensagens: MensagemDoAtendimento[];
 };
 
 function formatarDataHora(iso: string): string {
@@ -61,32 +54,23 @@ export default async function AtendimentosPage({
 
   const contaIds = (contas ?? []).map((c) => c.id);
 
+  // Só o necessário pra montar a LISTA (nome, @usuário, quantas mensagens, último contato) — o
+  // texto de cada mensagem (potencialmente milhares de linhas com conteúdo longo) só é buscado sob
+  // demanda quando alguém abre a conversa de um cliente específico (ver AtendimentoAccordion +
+  // api/shoppings/[id]/atendimentos/conversa).
   const { data: mensagens } =
     contaIds.length > 0
       ? await admin
           .from("shoppinghub_mensagens")
-          .select("instagram_scoped_id, direcao, texto, loja_id, cliente_nome, cliente_username, created_at")
+          .select("instagram_scoped_id, cliente_nome, cliente_username, created_at")
           .in("conta_id", contaIds)
           .order("created_at", { ascending: true })
           .limit(5000)
       : { data: [] as any[] };
 
-  const lojaIds = Array.from(new Set((mensagens ?? []).map((m) => m.loja_id).filter(Boolean)));
-  const { data: lojas } =
-    lojaIds.length > 0
-      ? await admin.from("shoppinghub_lojas").select("id, nome").in("id", lojaIds as string[])
-      : { data: [] as { id: string; nome: string }[] };
-  const nomePorLoja = new Map((lojas ?? []).map((l) => [l.id, l.nome]));
-
   const porCliente = new Map<string, Atendimento>();
   for (const m of mensagens ?? []) {
     const existente = porCliente.get(m.instagram_scoped_id);
-    const mensagemFormatada: MensagemDoAtendimento = {
-      direcao: m.direcao,
-      texto: m.texto,
-      dataHora: formatarDataHora(m.created_at),
-      lojaNome: m.loja_id ? nomePorLoja.get(m.loja_id) ?? null : null,
-    };
 
     if (!existente) {
       porCliente.set(m.instagram_scoped_id, {
@@ -95,12 +79,10 @@ export default async function AtendimentosPage({
         clienteUsername: m.cliente_username,
         totalMensagens: 1,
         ultimaMensagemEm: m.created_at,
-        mensagens: [mensagemFormatada],
       });
     } else {
       existente.totalMensagens += 1;
       existente.ultimaMensagemEm = m.created_at;
-      existente.mensagens.push(mensagemFormatada);
       // Atualiza nome/@usuário com o dado mais recente (pode ter vindo em branco numa mensagem
       // antiga e preenchido depois, ou a pessoa ter trocado de @usuário).
       if (m.cliente_nome) existente.clienteNome = m.cliente_nome;
@@ -183,48 +165,15 @@ export default async function AtendimentosPage({
 
               <div className="flex flex-col gap-2.5 border-t border-white/8 p-2.5">
                 {atendimentosDoDia.map((atendimento) => (
-                  <details
+                  <AtendimentoAccordion
                     key={atendimento.instagramScopedId}
-                    className="rounded-xl border border-white/8 bg-ink-850"
-                  >
-                    <summary className="flex cursor-pointer flex-wrap items-center justify-between gap-2 px-4 py-3">
-                      <div className="min-w-0">
-                        <p className="text-[13.5px] font-bold text-neutral-100">
-                          {atendimento.clienteNome}
-                          {atendimento.clienteUsername && (
-                            <span className="text-neutral-500"> @{atendimento.clienteUsername}</span>
-                          )}
-                        </p>
-                        <p className="mt-0.5 text-[11.5px] text-neutral-500">
-                          Último contato em {formatarDataHora(atendimento.ultimaMensagemEm)}
-                        </p>
-                      </div>
-                      <span className="shrink-0 rounded-full bg-white/8 px-2.5 py-1 text-[10.5px] font-semibold text-neutral-300">
-                        {atendimento.totalMensagens} mensagem{atendimento.totalMensagens === 1 ? "" : "ns"}
-                      </span>
-                    </summary>
-
-                    <ul className="divide-y divide-white/8 border-t border-white/8">
-                      {atendimento.mensagens.map((m, indice) => (
-                        <li key={indice} className="flex flex-col gap-0.5 px-4 py-2.5 text-xs">
-                          <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-                            <span
-                              className={
-                                m.direcao === "recebida"
-                                  ? "font-semibold text-neutral-300"
-                                  : "font-semibold text-accent-strong"
-                              }
-                            >
-                              {m.direcao === "recebida" ? "Cliente" : "Atendimento"}
-                              {m.lojaNome && <span className="text-neutral-500"> · {m.lojaNome}</span>}
-                            </span>
-                            <span className="shrink-0 text-neutral-500">{m.dataHora}</span>
-                          </div>
-                          <p className="text-neutral-400">{m.texto}</p>
-                        </li>
-                      ))}
-                    </ul>
-                  </details>
+                    shoppingId={params.id}
+                    instagramScopedId={atendimento.instagramScopedId}
+                    clienteNome={atendimento.clienteNome}
+                    clienteUsername={atendimento.clienteUsername}
+                    totalMensagens={atendimento.totalMensagens}
+                    ultimaMensagemEmFormatada={formatarDataHora(atendimento.ultimaMensagemEm)}
+                  />
                 ))}
               </div>
             </details>
