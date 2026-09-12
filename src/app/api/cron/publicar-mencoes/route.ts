@@ -149,11 +149,25 @@ export async function GET(request: NextRequest) {
       const controleDeCancelamento = new AbortController();
 
       try {
-        await comPrazo(
-          publicarMencao(admin, mencao, controleDeCancelamento.signal),
+        const storyMediaId = await comPrazo(
+          chamarMetaParaPublicar(admin, mencao, controleDeCancelamento.signal),
           prazoDoItem,
           () => controleDeCancelamento.abort()
         );
+
+        // A Meta já confirmou a publicação de verdade nesse ponto (storyMediaId em mãos) — daqui
+        // pra frente NÃO pode mais ficar sujeito ao prazo do item nem ser abandonado. Antes,
+        // gravar isso fazia parte da mesma corrida contra o prazo acima: se o item demorasse perto
+        // do limite, o `comPrazo` desistia e seguia pro próximo da fila enquanto a gravação do
+        // status "publicado" continuava rodando sozinha, sem ninguém esperar por ela — e se a
+        // function da Vercel fosse congelada logo depois de responder (comum quando o prazo já
+        // apertou), essa gravação nunca chegava a acontecer. A menção ficava presa em "publicando"
+        // com a Story JÁ publicada de verdade, e a reivindicação seguinte (até 3x) publicava tudo
+        // de novo — daí as duplicatas, terminando em "erro" mesmo já publicada. Ver
+        // finalizarMencaoPublicada abaixo: com o storyMediaId em mãos, ela nunca deixa a menção
+        // voltar pra "pendente"/"erro" (o que abriria brecha pra publicar de novo) — na pior das
+        // hipóteses (Supabase fora do ar), loga como crítico e mantém "publicando" mesmo.
+        await finalizarMencaoPublicada(admin, mencao, storyMediaId);
         resultado.publicadas += 1;
       } catch (erro) {
         console.error(`Falha ao publicar menção ${mencao.id}:`, erro);
@@ -219,7 +233,10 @@ function comPrazo<T>(promessa: Promise<T>, ms: number, aoEsgotar?: () => void): 
   });
 }
 
-async function publicarMencao(
+// Só a chamada de verdade pra Meta — a única parte que pode ser cancelada com segurança se
+// estourar o prazo do item (ver AbortController em processarFila acima). Nada aqui grava nada:
+// se a Meta confirmar a publicação, quem grava é finalizarMencaoPublicada, fora dessa corrida.
+async function chamarMetaParaPublicar(
   admin: ReturnType<typeof criarClienteAdmin>,
   mencao: {
     id: string;
@@ -229,7 +246,7 @@ async function publicarMencao(
     instagram_username: string | null;
   },
   signal: AbortSignal
-) {
+): Promise<string> {
   if (!mencao.storage_path) {
     throw new Error("Menção sem storage_path.");
   }
@@ -264,28 +281,90 @@ async function publicarMencao(
     }`
   );
 
-  // Gera a miniatura ANTES de apagar o arquivo original — depois desse ponto não sobra nenhuma
-  // mídia em tamanho real guardada (ver comentário abaixo), só essa versão pequena/comprimida.
+  return storyMediaId;
+}
+
+const TENTATIVAS_DE_GRAVACAO = 4;
+const ESPERA_BASE_MS_GRAVACAO = 500;
+
+function aguardar(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Roda DEPOIS que a Meta já confirmou a publicação (storyMediaId em mãos) — não recebe prazo nem
+// AbortSignal de propósito, porque não há mais nada seguro pra cancelar aqui: cancelar a GRAVAÇÃO
+// não desfaz a Story, só faria a gente esquecer que ela já foi publicada. Tenta algumas vezes
+// (com pequena espera entre elas) antes de desistir, porque uma falha passageira do Supabase bem
+// nessa hora era exatamente o que deixava a menção presa em "publicando" — daí a reivindicação
+// seguinte publicava tudo de novo (duplicata) e, depois de esgotar as tentativas automáticas,
+// sobrava marcada como "erro" mesmo já publicada de verdade no Instagram.
+async function finalizarMencaoPublicada(
+  admin: ReturnType<typeof criarClienteAdmin>,
+  mencao: { id: string; storage_path: string | null },
+  storyMediaId: string
+): Promise<void> {
+  let ultimoErro: unknown = null;
+
+  for (let tentativa = 1; tentativa <= TENTATIVAS_DE_GRAVACAO; tentativa++) {
+    const { error } = await admin
+      .from("shoppinghub_mencoes")
+      .update({
+        status: "publicado",
+        publicado_em: new Date().toISOString(),
+        story_media_id: storyMediaId,
+      })
+      .eq("id", mencao.id);
+
+    if (!error) {
+      ultimoErro = null;
+      break;
+    }
+
+    ultimoErro = error;
+    console.error(
+      `Falha ao gravar status "publicado" da menção ${mencao.id} (tentativa ${tentativa}/${TENTATIVAS_DE_GRAVACAO}):`,
+      error
+    );
+    if (tentativa < TENTATIVAS_DE_GRAVACAO) {
+      await aguardar(ESPERA_BASE_MS_GRAVACAO * tentativa);
+    }
+  }
+
+  if (ultimoErro) {
+    // Situação crítica e rara (Supabase indisponível bem nesse instante): a Story já está no
+    // Instagram, mas não conseguimos nem registrar isso. Loga bem alto pra alguém perceber e
+    // corrigir manualmente, e para por aqui SEM tocar no status — deixar em "publicando" é mais
+    // seguro do que devolver pra "pendente"/"erro", que deixaria a menção elegível pra ser
+    // publicada de novo (e ela já foi, de verdade).
+    console.error(
+      `CRÍTICO: menção ${mencao.id} foi publicada na Meta (storyMediaId ${storyMediaId}) mas ` +
+        `não foi possível gravar isso no banco após ${TENTATIVAS_DE_GRAVACAO} tentativas. ` +
+        `Verificar e corrigir manualmente — NÃO republicar.`,
+      ultimoErro
+    );
+    return;
+  }
+
+  // Só chega aqui com o status "publicado" já gravado — o resto (miniatura, limpeza do arquivo
+  // grande) é auxiliar. Se falhar, a menção continua corretamente marcada como publicada, só sem
+  // miniatura (mostra o ícone genérico na Fila).
+  if (!mencao.storage_path) return;
+
   const thumbnailPath = await gerarThumbnailDeMencao(admin, mencao.id, mencao.storage_path);
 
-  await admin
+  const { error: erroAoAtualizarThumb } = await admin
     .from("shoppinghub_mencoes")
-    .update({
-      status: "publicado",
-      publicado_em: new Date().toISOString(),
-      story_media_id: storyMediaId,
-      storage_path: null,
-      thumbnail_path: thumbnailPath,
-    })
+    .update({ storage_path: null, thumbnail_path: thumbnailPath })
     .eq("id", mencao.id);
 
-  // Já publicou de verdade (storyMediaId confirma que a Meta recebeu a mídia) — não tem motivo
-  // pra continuar guardando o arquivo em tamanho real aqui. O registro em shoppinghub_mencoes
-  // (loja, horário, status, miniatura pequena) já serve de log/auditoria sem precisar acumular
-  // mídia grande no Storage.
-  const { error: erroAoApagar } = await admin.storage
-    .from(BUCKET_MENCOES)
-    .remove([mencao.storage_path]);
+  if (erroAoAtualizarThumb) {
+    console.error(`Falha ao gravar miniatura da menção ${mencao.id}:`, erroAoAtualizarThumb);
+  }
+
+  // Já publicou de verdade — não tem motivo pra continuar guardando o arquivo em tamanho real
+  // aqui. O registro em shoppinghub_mencoes (loja, horário, status, miniatura pequena) já serve
+  // de log/auditoria sem precisar acumular mídia grande no Storage.
+  const { error: erroAoApagar } = await admin.storage.from(BUCKET_MENCOES).remove([mencao.storage_path]);
 
   if (erroAoApagar) {
     console.error(`Falha ao apagar mídia publicada (menção ${mencao.id}):`, erroAoApagar);
