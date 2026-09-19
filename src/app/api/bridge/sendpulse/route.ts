@@ -5,6 +5,10 @@ import { decidirLoja, responderComoLoja, type LojaComConhecimento } from "@/lib/
 const CAMPOS_DA_LOJA =
   "id, nome, eh_geral, endereco, telefone, email, horario_atendimento, responsavel, base_conhecimento_texto";
 
+// Campos leves usados só pra decidirLoja (ver triagem.ts) escolher qual loja deve responder — ver
+// mesmo comentário em src/app/api/webhook/instagram/route.ts.
+const CAMPOS_DA_LOJA_PARA_TRIAGEM = "id, nome, eh_geral";
+
 // Ponte temporária: enquanto o App Review do ShoppingHub não sai, o SendPulse (que já tem acesso
 // aprovado pela Meta) recebe a mensagem de verdade e chama esse endpoint pra decidir a resposta —
 // o ShoppingHub nunca fala com a Meta nesse fluxo, só devolve o texto pro SendPulse mandar.
@@ -116,7 +120,7 @@ export async function POST(request: NextRequest) {
 
   const { data: lojas } = await admin
     .from("shoppinghub_lojas")
-    .select(CAMPOS_DA_LOJA)
+    .select(CAMPOS_DA_LOJA_PARA_TRIAGEM)
     .eq("shopping_id", shopping.id)
     .eq("ativo", true)
     .order("ordem", { ascending: true });
@@ -125,7 +129,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ erro: "Shopping sem lojas ativas." }, { status: 422 });
   }
 
-  const lojaEscolhida = await decidirLoja(lojas as LojaComConhecimento[], historicoRecente, textoDaMensagem);
+  const lojaDecidida = await decidirLoja(lojas, historicoRecente, textoDaMensagem);
+
+  const lojaEscolhida = lojaDecidida
+    ? ((
+        await admin.from("shoppinghub_lojas").select(CAMPOS_DA_LOJA).eq("id", lojaDecidida.id).maybeSingle()
+      ).data as LojaComConhecimento | null)
+    : null;
 
   if (lojaEscolhida && mensagemRecebida) {
     await admin

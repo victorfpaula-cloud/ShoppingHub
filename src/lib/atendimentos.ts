@@ -27,6 +27,13 @@ type MensagemDoAtendimento = {
   created_at: string;
 };
 
+// Só os campos que calcularResumo de fato usa (contagens e agrupamento por loja) — nunca o texto
+// da mensagem, que pode ser longo e não entra em nenhuma conta do resumo. Usado pelo caminho que
+// só quer números (relatório em PDF por e-mail, automático a cada 30 dias — ver
+// buscarResumoDeAtendimentos), pra não trazer do banco a conversa inteira só pra contar linhas
+// (achado ao revisar egress do Supabase em 19/09/2026).
+type MensagemResumida = Pick<MensagemDoAtendimento, "instagram_scoped_id" | "direcao" | "loja_id">;
+
 export type ResumoDeAtendimentos = {
   recebidas: number;
   respondidas: number;
@@ -70,8 +77,46 @@ async function buscarMensagensDoPeriodo(
   return { mensagens: todasAsMensagens, nomePorLoja };
 }
 
+/**
+ * Mesma ideia de buscarMensagensDoPeriodo, mas só com os campos que um resumo (contagens,
+ * ranking por loja) precisa — nunca o texto da mensagem nem dados do cliente.
+ */
+async function buscarResumoDoPeriodo(
+  admin: SupabaseClient,
+  shoppingId: string,
+  desde: Date,
+  ate: Date
+): Promise<{ mensagens: MensagemResumida[]; nomePorLoja: Map<string, string> }> {
+  const { data: contas } = await admin
+    .from("shoppinghub_contas")
+    .select("id")
+    .eq("shopping_id", shoppingId);
+  const contaIds = (contas ?? []).map((c) => c.id);
+
+  const { data: mensagens } =
+    contaIds.length > 0
+      ? await admin
+          .from("shoppinghub_mensagens")
+          .select("instagram_scoped_id, direcao, loja_id")
+          .in("conta_id", contaIds)
+          .gte("created_at", desde.toISOString())
+          .lt("created_at", ate.toISOString())
+      : { data: [] as MensagemResumida[] };
+
+  const todasAsMensagens = (mensagens ?? []) as MensagemResumida[];
+
+  const lojaIds = Array.from(new Set(todasAsMensagens.map((m) => m.loja_id).filter(Boolean)));
+  const { data: lojas } =
+    lojaIds.length > 0
+      ? await admin.from("shoppinghub_lojas").select("id, nome").in("id", lojaIds as string[])
+      : { data: [] as { id: string; nome: string }[] };
+  const nomePorLoja = new Map((lojas ?? []).map((l) => [l.id, l.nome]));
+
+  return { mensagens: todasAsMensagens, nomePorLoja };
+}
+
 function calcularResumo(
-  mensagens: MensagemDoAtendimento[],
+  mensagens: MensagemResumida[],
   nomePorLoja: Map<string, string>
 ): ResumoDeAtendimentos {
   const recebidas = mensagens.filter((m) => m.direcao === "recebida");
@@ -155,6 +200,6 @@ export async function buscarResumoDeAtendimentos(
   desde: Date,
   ate: Date
 ): Promise<ResumoDeAtendimentos> {
-  const { mensagens, nomePorLoja } = await buscarMensagensDoPeriodo(admin, shoppingId, desde, ate);
+  const { mensagens, nomePorLoja } = await buscarResumoDoPeriodo(admin, shoppingId, desde, ate);
   return calcularResumo(mensagens, nomePorLoja);
 }

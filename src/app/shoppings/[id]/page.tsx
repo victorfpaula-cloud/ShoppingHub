@@ -64,10 +64,15 @@ export default async function LojasDoShoppingPage({
 }) {
   const admin = criarClienteAdmin();
 
+  // "tem_base_conhecimento" é uma coluna gerada (boolean, calculada a partir de
+  // base_conhecimento_texto) — o cartão de cada loja só precisa saber SE tem base preenchida, não
+  // o texto inteiro (que pode ser longo, tipo lista de produtos e preços). Antes disso, essa tela
+  // — a mais visitada do painel — trazia o texto completo de todas as lojas a cada carregamento só
+  // pra mostrar "Com base"/"Sem base" (achado ao revisar egress do Supabase em 19/09/2026).
   const { data: lojasEncontradas } = await admin
     .from("shoppinghub_lojas")
     .select(
-      "id, nome, eh_geral, ativo, instagram_username, instagram_username_2, base_conhecimento_texto"
+      "id, nome, eh_geral, ativo, instagram_username, instagram_username_2, tem_base_conhecimento"
     )
     .eq("shopping_id", params.id);
 
@@ -223,7 +228,7 @@ export default async function LojasDoShoppingPage({
                     : "Sem @usuário autorizado"}
                 </span>
                 <span className="shrink-0 rounded-full border border-white/12 px-2.5 py-1 text-[11px] font-semibold text-neutral-400">
-                  {loja.base_conhecimento_texto?.trim() ? "Com base" : "Sem base"}
+                  {loja.tem_base_conhecimento ? "Com base" : "Sem base"}
                 </span>
               </div>
 

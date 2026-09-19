@@ -88,40 +88,43 @@ const LARGURA_THUMBNAIL = 160;
 const QUALIDADE_THUMBNAIL = 60;
 
 /**
- * Gera uma miniatura pequena e comprimida a partir da mídia recém-publicada, ANTES dela ser
- * apagada do Storage (ver cron de publicação) — sem isso, a Fila de Menções não teria nenhuma
- * imagem pra mostrar no resumo de "hoje", já que o arquivo original não fica guardado (pedido em
- * 05/09/2026, pra não acumular espaço no Storage). Só faz sentido pra imagem: vídeo já é mostrado
- * com um ícone fixo em vez de miniatura (mesma lógica de não baixar/tocar vídeo na Fila), então
- * nem tenta gerar. Nunca lança erro — se falhar, a menção fica sem miniatura (mostra o ícone
- * genérico), mas a publicação em si (que já aconteceu de verdade no Instagram) não é afetada.
+ * Gera uma miniatura pequena e comprimida a partir dos bytes que JÁ estão em memória (a mesma
+ * mídia que acabou de ser processada e vai subir pro Storage em subirMidiaDeMencao) — pra Fila de
+ * Menções ter uma imagem pra mostrar mesmo depois do arquivo original ser apagado (pedido em
+ * 05/09/2026, pra não acumular espaço no Storage), sem precisar baixar esse arquivo de volta do
+ * Storage depois (essa miniatura ANTES era gerada só depois de publicar, baixando o original de
+ * novo — trocado por essa versão em memória ao revisar egress do Supabase em 19/09/2026: baixar de
+ * volta um arquivo que a gente mesma acabou de subir, só pra encolher, era o maior desperdício de
+ * egress do Storage do projeto). Só faz sentido pra imagem: vídeo já é mostrado com um ícone fixo
+ * em vez de miniatura (mesma lógica de não baixar/tocar vídeo na Fila), então nem tenta gerar.
+ * Nunca lança erro — se falhar, a menção fica sem miniatura (mostra o ícone genérico), mas o resto
+ * do processamento não é afetado.
  */
-export async function gerarThumbnailDeMencao(
+export async function gerarEArmazenarThumbnail(
   admin: SupabaseClient,
   mencaoId: string,
-  storagePath: string
+  bytesDaMidia: Uint8Array,
+  contentType: string
 ): Promise<string | null> {
-  if (storagePath.endsWith(".mp4")) return null;
+  if (!ehImagem(contentType)) return null;
 
   try {
-    const { data: original, error: erroAoBaixar } = await admin.storage
-      .from(BUCKET_MENCOES)
-      .download(storagePath);
-
-    if (erroAoBaixar || !original) {
-      throw erroAoBaixar ?? new Error("Download da mídia original veio vazio.");
-    }
-
-    const bytesOriginais = Buffer.from(await original.arrayBuffer());
-    const bytesDaThumbnail = await sharp(bytesOriginais)
+    const bytesDaThumbnail = await sharp(Buffer.from(bytesDaMidia))
       .resize(LARGURA_THUMBNAIL, LARGURA_THUMBNAIL, { fit: "cover" })
       .jpeg({ quality: QUALIDADE_THUMBNAIL })
       .toBuffer();
 
     const thumbnailPath = `${mencaoId}-thumb.jpg`;
+    // cacheControl longo — path com sufixo fixo (`-thumb.jpg`), então é reescrita, não recriação,
+    // mas o conteúdo de uma miniatura de uma menção já publicada não muda mais depois de gerada.
+    // Reduz egress de re-fetch pelo navegador toda vez que a Fila de Menções é recarregada.
     const { error: erroAoSubir } = await admin.storage
       .from(BUCKET_MENCOES)
-      .upload(thumbnailPath, bytesDaThumbnail, { contentType: "image/jpeg", upsert: true });
+      .upload(thumbnailPath, bytesDaThumbnail, {
+        contentType: "image/jpeg",
+        upsert: true,
+        cacheControl: "31536000",
+      });
 
     if (erroAoSubir) throw erroAoSubir;
 
@@ -232,9 +235,17 @@ export async function processarMencaoRecebida(
       midiaFinal.bytes,
       midiaFinal.contentType
     );
+    // Gerada aqui, com os bytes já em memória — não no cron de publicação, que antes baixava esse
+    // mesmo arquivo de volta do Storage só pra isso (ver gerarEArmazenarThumbnail acima).
+    const thumbnailPath = await gerarEArmazenarThumbnail(
+      admin,
+      mencaoCriada.id,
+      midiaFinal.bytes,
+      midiaFinal.contentType
+    );
     await admin
       .from("shoppinghub_mencoes")
-      .update({ storage_path: storagePath })
+      .update({ storage_path: storagePath, thumbnail_path: thumbnailPath })
       .eq("id", mencaoCriada.id);
   } catch (erro) {
     console.error("Falha ao subir mídia de menção de Story pro Storage:", erro);

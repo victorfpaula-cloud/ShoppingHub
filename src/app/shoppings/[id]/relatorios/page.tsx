@@ -57,12 +57,18 @@ export default async function RelatoriosDeMencoesPage({
   const idsDasLojas = (lojas ?? []).map((l) => l.id);
   const nomePorLoja = new Map((lojas ?? []).map((l) => [l.id, l.nome]));
 
+  // Nada nessa página olha além de DIAS_NO_DETALHAMENTO (30 dias — é também o maior período do
+  // seletor "Hoje/15/30 dias" logo abaixo), então corta direto na query — sem isso, a busca trazia
+  // TODO o histórico de menções desde sempre a cada carregamento da página, crescendo pra sempre
+  // (achado ao revisar egress do Supabase em 19/09/2026).
+  const corteDaConsulta = new Date(Date.now() - DIAS_NO_DETALHAMENTO * 24 * 60 * 60 * 1000).toISOString();
   const { data: todasAsMencoes } =
     idsDasLojas.length > 0
       ? await admin
           .from("shoppinghub_mencoes")
           .select("id, loja_id, status, recebido_em")
           .in("loja_id", idsDasLojas)
+          .gte("recebido_em", corteDaConsulta)
       : { data: [] as MencaoResumida[] };
 
   const mencoes = (todasAsMencoes ?? []) as MencaoResumida[];

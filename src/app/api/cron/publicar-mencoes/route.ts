@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { criarClienteAdmin } from "@/lib/supabase/admin";
 import { publicarStoryNoInstagram } from "@/lib/metaMessaging";
-import { gerarThumbnailDeMencao } from "@/lib/mencoes";
 import { BUCKET_MENCOES, tipoDeMidiaPorContentType } from "@/lib/mencoesConstantes";
 import { limparMensagensAntigas } from "@/lib/retencao";
 import { exportarRelatoriosDevidos } from "@/lib/relatorios";
@@ -118,6 +117,20 @@ export async function GET(request: NextRequest) {
   const filaOrdenada = mencoesPendentes ?? [];
   let proximoIndice = 0;
 
+  // Busca a conta de cada shopping UMA vez só, de fora do loop — antes, chamarMetaParaPublicar
+  // buscava a conta do zero pra CADA menção, e como é comum um shopping ter só uma conta de
+  // Instagram, uma fila com várias menções pendentes da mesma conta repetia a mesma busca várias
+  // vezes na mesma execução do cron (achado ao revisar egress do Supabase em 19/09/2026).
+  const idsDeContasNaFila = Array.from(new Set(filaOrdenada.map((m) => m.conta_id)));
+  const { data: contasDaFila } =
+    idsDeContasNaFila.length > 0
+      ? await admin
+          .from("shoppinghub_contas")
+          .select("id, instagram_user_id, access_token, active")
+          .in("id", idsDeContasNaFila)
+      : { data: [] as { id: string; instagram_user_id: string; access_token: string; active: boolean }[] };
+  const contaPorId = new Map((contasDaFila ?? []).map((c) => [c.id, c]));
+
   async function processarFila(): Promise<void> {
     while (proximoIndice < filaOrdenada.length) {
       const mencao = filaOrdenada[proximoIndice++];
@@ -151,7 +164,7 @@ export async function GET(request: NextRequest) {
 
       try {
         const storyMediaId = await comPrazo(
-          chamarMetaParaPublicar(admin, mencao, controleDeCancelamento.signal),
+          chamarMetaParaPublicar(admin, mencao, contaPorId.get(mencao.conta_id), controleDeCancelamento.signal),
           prazoDoItem,
           () => controleDeCancelamento.abort()
         );
@@ -246,19 +259,14 @@ async function chamarMetaParaPublicar(
     storage_path: string | null;
     instagram_username: string | null;
   },
+  conta: { instagram_user_id: string; access_token: string; active: boolean } | undefined,
   signal: AbortSignal
 ): Promise<string> {
   if (!mencao.storage_path) {
     throw new Error("Menção sem storage_path.");
   }
 
-  const { data: conta, error: erroAoBuscarConta } = await admin
-    .from("shoppinghub_contas")
-    .select("instagram_user_id, access_token, active")
-    .eq("id", mencao.conta_id)
-    .maybeSingle();
-
-  if (erroAoBuscarConta || !conta || !conta.active) {
+  if (!conta || !conta.active) {
     throw new Error("Conta do Instagram não encontrada ou pausada.");
   }
 
@@ -346,20 +354,19 @@ async function finalizarMencaoPublicada(
     return;
   }
 
-  // Só chega aqui com o status "publicado" já gravado — o resto (miniatura, limpeza do arquivo
-  // grande) é auxiliar. Se falhar, a menção continua corretamente marcada como publicada, só sem
-  // miniatura (mostra o ícone genérico na Fila).
+  // Só chega aqui com o status "publicado" já gravado — o resto (limpeza do arquivo grande) é
+  // auxiliar. A miniatura já foi gerada lá no recebimento da menção, a partir dos bytes em memória
+  // (ver gerarEArmazenarThumbnail em mencoes.ts) — não precisa mais ser gerada aqui, o que evitava
+  // um download completo do arquivo original de volta do Storage só pra encolher.
   if (!mencao.storage_path) return;
 
-  const thumbnailPath = await gerarThumbnailDeMencao(admin, mencao.id, mencao.storage_path);
-
-  const { error: erroAoAtualizarThumb } = await admin
+  const { error: erroAoLimparStoragePath } = await admin
     .from("shoppinghub_mencoes")
-    .update({ storage_path: null, thumbnail_path: thumbnailPath })
+    .update({ storage_path: null })
     .eq("id", mencao.id);
 
-  if (erroAoAtualizarThumb) {
-    console.error(`Falha ao gravar miniatura da menção ${mencao.id}:`, erroAoAtualizarThumb);
+  if (erroAoLimparStoragePath) {
+    console.error(`Falha ao limpar storage_path da menção ${mencao.id}:`, erroAoLimparStoragePath);
   }
 
   // Já publicou de verdade — não tem motivo pra continuar guardando o arquivo em tamanho real

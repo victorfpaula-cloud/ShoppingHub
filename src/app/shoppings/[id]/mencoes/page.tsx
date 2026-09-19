@@ -48,7 +48,7 @@ export default async function FilaDeMencoesPage({
           // aparecer no topo.
           admin
             .from("shoppinghub_mencoes")
-            .select("id, loja_id, status, recebido_em, storage_path, tentativas")
+            .select("id, loja_id, status, recebido_em, storage_path, thumbnail_path, tentativas")
             .in("loja_id", idsDasLojas)
             .in("status", ["pendente", "erro"])
             .order("recebido_em", { ascending: true })
@@ -130,10 +130,15 @@ export default async function FilaDeMencoesPage({
             {(itensDeAtencao ?? []).map((mencao) => {
               const rotulo = ROTULO_DO_STATUS[mencao.status];
               const ehVideo = mencao.storage_path?.endsWith(".mp4") ?? false;
-              const urlDaMidia =
-                mencao.storage_path && !ehVideo
-                  ? admin.storage.from(BUCKET_MENCOES).getPublicUrl(mencao.storage_path).data.publicUrl
-                  : null;
+              // Prefere a miniatura pequena (poucos KB) — só cai pro arquivo original em tamanho
+              // real se por algum motivo a miniatura ainda não existir (ex.: gerada antes dessa
+              // mudança, ou falhou na hora — ver gerarEArmazenarThumbnail em mencoes.ts). Antes,
+              // esse card sempre buscava o arquivo original de publicação pra mostrar 52x52px, o
+              // que é egress do Storage desnecessário (achado em 19/09/2026).
+              const caminhoDaMiniatura = mencao.thumbnail_path ?? (!ehVideo ? mencao.storage_path : null);
+              const urlDaMidia = caminhoDaMiniatura
+                ? admin.storage.from(BUCKET_MENCOES).getPublicUrl(caminhoDaMiniatura).data.publicUrl
+                : null;
               const emErro = mencao.status === "erro";
 
               return (
@@ -255,7 +260,7 @@ export default async function FilaDeMencoesPage({
                     className="h-9 w-9 shrink-0 rounded-lg object-cover"
                   />
                 ) : (
-                  // Vídeo (sem miniatura, ver gerarThumbnailDeMencao) ou menção antiga, de antes
+                  // Vídeo (sem miniatura, ver gerarEArmazenarThumbnail) ou menção antiga, de antes
                   // dessa miniatura existir — ícone genérico no lugar, sem quebrar o layout.
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-ink-950 text-neutral-600">
                     <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">

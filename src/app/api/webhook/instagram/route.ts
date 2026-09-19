@@ -12,6 +12,13 @@ export const maxDuration = 60;
 const CAMPOS_DA_LOJA =
   "id, nome, eh_geral, endereco, telefone, email, horario_atendimento, responsavel, base_conhecimento_texto";
 
+// Campos leves usados só pra decidirLoja (ver triagem.ts) escolher qual loja deve responder — a
+// base de conhecimento e os dados de contato de cada loja (potencialmente extensos) só interessam
+// depois de já saber QUAL loja venceu, não pra decidir entre elas (achado ao revisar egress do
+// Supabase em 19/09/2026: antes disso, toda mensagem recebida trazia a base de conhecimento de
+// TODAS as lojas ativas do shopping, mesmo a IA de triagem só olhando o nome de cada uma).
+const CAMPOS_DA_LOJA_PARA_TRIAGEM = "id, nome, eh_geral";
+
 export async function GET(request: NextRequest) {
   const modo = request.nextUrl.searchParams.get("hub.mode");
   const tokenRecebido = request.nextUrl.searchParams.get("hub.verify_token");
@@ -252,7 +259,7 @@ async function processarEventoDeMensagem(admin: ReturnType<typeof criarClienteAd
   if (!lojaEscolhida) {
     const { data: lojas } = await admin
       .from("shoppinghub_lojas")
-      .select(CAMPOS_DA_LOJA)
+      .select(CAMPOS_DA_LOJA_PARA_TRIAGEM)
       .eq("shopping_id", conta.shopping_id)
       .eq("ativo", true)
       .order("ordem", { ascending: true });
@@ -262,7 +269,17 @@ async function processarEventoDeMensagem(admin: ReturnType<typeof criarClienteAd
       return;
     }
 
-    lojaEscolhida = await decidirLoja(lojas as LojaComConhecimento[], historicoRecente, textoDaMensagem);
+    const lojaDecidida = await decidirLoja(lojas, historicoRecente, textoDaMensagem);
+
+    if (lojaDecidida) {
+      const { data: lojaCompleta } = await admin
+        .from("shoppinghub_lojas")
+        .select(CAMPOS_DA_LOJA)
+        .eq("id", lojaDecidida.id)
+        .maybeSingle();
+
+      lojaEscolhida = (lojaCompleta as LojaComConhecimento | null) ?? null;
+    }
   }
 
   // Atualiza a mensagem recebida com a loja decidida — assim o relatório de atendimentos
