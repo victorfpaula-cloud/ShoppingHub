@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { criarClienteAdmin } from "@/lib/supabase/admin";
 import { publicarStoryNoInstagram } from "@/lib/metaMessaging";
-import { BUCKET_MENCOES, tipoDeMidiaPorContentType, gerarThumbnailDeMencao } from "@/lib/mencoes";
+import { gerarThumbnailDeMencao } from "@/lib/mencoes";
+import { BUCKET_MENCOES, tipoDeMidiaPorContentType } from "@/lib/mencoesConstantes";
 import { limparMensagensAntigas } from "@/lib/retencao";
 import { exportarRelatoriosDevidos } from "@/lib/relatorios";
 

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { criarClienteAdmin } from "@/lib/supabase/admin";
-import { BUCKET_MENCOES } from "@/lib/mencoes";
+import { BUCKET_MENCOES } from "@/lib/mencoesConstantes";
 
 // Exclui uma menção da fila manualmente — útil pra tirar um teste, uma menção indevida, ou uma
 // pendente que não deve mais ser publicada. Se ainda tiver mídia guardada (pendente/erro), apaga

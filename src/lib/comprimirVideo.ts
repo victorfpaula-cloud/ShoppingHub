@@ -4,7 +4,8 @@ import { promisify } from "node:util";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-import { gerarSeloDeCredito, POSICAO_Y_TAG_NATIVA } from "./creditoNaImagem";
+import { gerarSeloDeCredito } from "./creditoNaImagem";
+import { POSICAO_Y_TAG_NATIVA } from "./mencoesConstantes";
 
 const execFileAsync = promisify(execFile);
 

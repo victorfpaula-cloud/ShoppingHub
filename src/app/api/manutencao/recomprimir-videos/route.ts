@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { criarClienteAdmin } from "@/lib/supabase/admin";
-import { BUCKET_MENCOES } from "@/lib/mencoes";
+import { BUCKET_MENCOES } from "@/lib/mencoesConstantes";
 import { comprimirVideo } from "@/lib/comprimirVideo";
 
 export const dynamic = "force-dynamic";

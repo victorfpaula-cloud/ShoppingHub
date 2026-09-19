@@ -1,5 +1,5 @@
 import { criarClienteAdmin } from "@/lib/supabase/admin";
-import { inicioDoDiaBrasiliaISO } from "@/lib/mencoes";
+import { inicioDoDiaBrasiliaISO } from "@/lib/mencoesConstantes";
 import { DiaDeMencoesAccordion } from "@/components/DiaDeMencoesAccordion";
 import { BotaoEnviarRelatorioPorEmail } from "@/components/BotaoEnviarRelatorioPorEmail";
 

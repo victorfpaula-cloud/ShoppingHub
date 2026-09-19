@@ -1,5 +1,5 @@
 import { criarClienteAdmin } from "@/lib/supabase/admin";
-import { BUCKET_MENCOES, inicioDoDiaBrasiliaISO } from "@/lib/mencoes";
+import { BUCKET_MENCOES, inicioDoDiaBrasiliaISO } from "@/lib/mencoesConstantes";
 import { BotaoAtualizar } from "@/components/BotaoAtualizar";
 
 export const dynamic = "force-dynamic";

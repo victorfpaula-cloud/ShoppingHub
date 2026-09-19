@@ -3,6 +3,7 @@ import sharp from "sharp";
 import { baixarMidiaDoStory, buscarPerfilDoCliente } from "./metaMessaging";
 import { adicionarFaixaDeCredito, ehImagem } from "./creditoNaImagem";
 import { comprimirVideo } from "./comprimirVideo";
+import { BUCKET_MENCOES, inicioDoDiaBrasiliaISO } from "./mencoesConstantes";
 
 const HORAS_DE_CACHE_DO_PERFIL = 24;
 
@@ -48,40 +49,10 @@ export async function buscarPerfilDoClienteComCache(
   return perfil;
 }
 
-// Bucket público do Supabase Storage onde ficam guardadas as mídias baixadas de menções de Story
-// — precisa ser público porque a API de publicação de Stories da Meta exige uma `image_url`/
-// `video_url` acessível publicamente (não aceita link autenticado nem upload direto de arquivo).
-export const BUCKET_MENCOES = "shoppinghub-mencoes";
-
-/**
- * Meia-noite de "hoje" no horário de Brasília (UTC-3, sem horário de verão hoje em dia — fixo o
- * ano todo), devolvida como instante UTC. Usada pra resetar a contagem diária de menções de cada
- * loja: uma menção conta pro dia se `recebido_em >= inicioDoDiaBrasilia()`.
- */
-export function inicioDoDiaBrasiliaISO(agora: Date = new Date()): string {
-  const OFFSET_BRASILIA_HORAS = 3;
-  const agoraEmBrasilia = new Date(agora.getTime() - OFFSET_BRASILIA_HORAS * 60 * 60 * 1000);
-
-  const meiaNoiteEmBrasilia = Date.UTC(
-    agoraEmBrasilia.getUTCFullYear(),
-    agoraEmBrasilia.getUTCMonth(),
-    agoraEmBrasilia.getUTCDate(),
-    0,
-    0,
-    0
-  );
-
-  return new Date(meiaNoiteEmBrasilia + OFFSET_BRASILIA_HORAS * 60 * 60 * 1000).toISOString();
-}
-
 function extensaoPorContentType(contentType: string): string {
   if (contentType.includes("video")) return "mp4";
   if (contentType.includes("png")) return "png";
   return "jpg";
-}
-
-export function tipoDeMidiaPorContentType(contentType: string): "IMAGE" | "VIDEO" {
-  return contentType.includes("video") ? "VIDEO" : "IMAGE";
 }
 
 /**

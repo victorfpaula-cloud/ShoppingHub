@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { POSICAO_Y_TAG_NATIVA } from "./creditoNaImagem";
+import { POSICAO_Y_TAG_NATIVA } from "./mencoesConstantes";
 
 const GRAPH_API_VERSION = "v21.0";
 

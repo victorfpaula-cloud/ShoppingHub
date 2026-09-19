@@ -2,6 +2,7 @@ import sharp from "sharp";
 import opentype from "opentype.js";
 import path from "node:path";
 import { readFile } from "node:fs/promises";
+import { POSICAO_Y_TAG_NATIVA } from "./mencoesConstantes";
 
 /**
  * Sobrepõe um selo discreto com o @usuário de quem marcou o shopping no Story, antes de
@@ -13,20 +14,6 @@ import { readFile } from "node:fs/promises";
 export function ehImagem(contentType: string): boolean {
   return contentType.includes("image");
 }
-
-// Fração da altura onde fica o CENTRO do selo queimado E da marcação nativa (user_tags, ver
-// metaMessaging.ts) — os dois usam o MESMO valor de propósito, pra ficarem alinhados: o selo é só
-// um desenho, não é clicável sozinho, então ele precisa marcar visualmente o lugar EXATO onde a
-// marcação de verdade responde ao toque (senão vira um botão "mudo" que parece real, mas não é —
-// visto na prática em 06/09/2026, quando os dois ficaram temporariamente em posições diferentes).
-//
-// Não pode ficar muito perto do rodapé (~0.92, testado em 04/09/2026): a barra de "responder" que
-// o próprio Instagram desenha por cima da Story intercepta o toque nessa faixa inferior (~13% de
-// baixo). 0.80 fica dentro da área segura (a Meta recomenda evitar os ~13% de cima e de baixo da
-// tela pra qualquer elemento interativo) — o topo tem essa mesma faixa reservada pro cabeçalho da
-// própria Story (foto de perfil, nome da conta, horário, menu, botão de fechar), então mover pra
-// lá teria o mesmo problema, só que no sentido inverso.
-export const POSICAO_Y_TAG_NATIVA = 0.8;
 
 // Selo pequeno (formato pílula, cantos arredondados) em vez da faixa preta de ponta a ponta que
 // tinha antes — achada "exagerada" na prática (relatado em 05/09/2026). Mais parecido com o
