@@ -473,3 +473,105 @@ export async function publicarNoFeedInstagram(
 
   return publicarContainerNoFeed(instagramUserId, tokenDaConta, containerPaiId, signal);
 }
+
+export type InsightsDaConta = {
+  alcance: number | null;
+  visualizacoesDoPerfil: number | null;
+  contasEngajadas: number | null;
+  interacoesTotais: number | null;
+  novosSeguidores: number | null;
+  seguidoresAtuais: number | null;
+};
+
+// Tempo máximo esperando a Meta responder cada chamada de insights — sem isso, uma API lenta (ou
+// fora do ar) travaria o carregamento inteiro da página de Relatórios, que já faz outras buscas no
+// Supabase. Não lança: cada grupo de métricas falha sozinho (ver buscarInsightsDaConta), então uma
+// trava aqui só deixa esse grupo específico como null, sem derrubar o resto.
+const PRAZO_MS_INSIGHTS = 8000;
+
+async function buscarComPrazo(url: string): Promise<any> {
+  const resposta = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(PRAZO_MS_INSIGHTS) });
+  const corpoBruto = await resposta.text();
+
+  if (!resposta.ok) {
+    throw new Error(`Status ${resposta.status}: ${corpoBruto}`);
+  }
+
+  return JSON.parse(corpoBruto);
+}
+
+function somarValoresDaSerie(dados: any, nomeDaMetrica: string): number | null {
+  const serie = dados?.data?.find((m: any) => m.name === nomeDaMetrica);
+  const valores = serie?.values as { value: number }[] | undefined;
+  if (!valores) return null;
+  return valores.reduce((soma, v) => soma + (v.value ?? 0), 0);
+}
+
+function lerValorTotal(dados: any, nomeDaMetrica: string): number | null {
+  const metrica = dados?.data?.find((m: any) => m.name === nomeDaMetrica);
+  const valor = metrica?.total_value?.value;
+  return typeof valor === "number" ? valor : null;
+}
+
+/**
+ * Busca os números de alcance/engajamento/seguidores da conta do Instagram do shopping, pros
+ * cartões de "Insights da conta" na aba Relatórios (painel) e no e-mail automático — ver
+ * ESCOPOS em facebookOAuth.ts (precisa de `instagram_manage_insights`; contas conectadas antes
+ * dessa permissão existir precisam reconectar).
+ *
+ * Três chamadas independentes, cada uma com seu próprio try/catch — métricas do tipo "série
+ * temporal" (somadas dia a dia) não podem ser pedidas na MESMA chamada que métricas do tipo
+ * "valor total" (a Meta rejeita misturar metric_type na mesma requisição), e o total de
+ * seguidores ATUAL vem de um campo do nó da conta, não do endpoint de insights. Se uma falhar
+ * (ex.: permissão faltando, métrica indisponível pra esse tipo de conta), as outras duas ainda
+ * aparecem — melhor um cartão faltando do que a aba inteira quebrando.
+ */
+export async function buscarInsightsDaConta(
+  tokenDaConta: string,
+  instagramUserId: string,
+  dias: number
+): Promise<InsightsDaConta> {
+  const agora = Math.floor(Date.now() / 1000);
+  const desde = agora - dias * 24 * 60 * 60;
+
+  const resultado: InsightsDaConta = {
+    alcance: null,
+    visualizacoesDoPerfil: null,
+    contasEngajadas: null,
+    interacoesTotais: null,
+    novosSeguidores: null,
+    seguidoresAtuais: null,
+  };
+
+  try {
+    const dadosSerieTemporal = await buscarComPrazo(
+      `https://graph.facebook.com/${GRAPH_API_VERSION}/${instagramUserId}/insights?metric=reach,profile_views,follower_count&period=day&metric_type=time_series&since=${desde}&until=${agora}&access_token=${encodeURIComponent(tokenDaConta)}`
+    );
+    resultado.alcance = somarValoresDaSerie(dadosSerieTemporal, "reach");
+    resultado.visualizacoesDoPerfil = somarValoresDaSerie(dadosSerieTemporal, "profile_views");
+    resultado.novosSeguidores = somarValoresDaSerie(dadosSerieTemporal, "follower_count");
+  } catch (erro) {
+    console.error("Falha ao buscar insights (série temporal) da conta:", erro);
+  }
+
+  try {
+    const dadosValorTotal = await buscarComPrazo(
+      `https://graph.facebook.com/${GRAPH_API_VERSION}/${instagramUserId}/insights?metric=accounts_engaged,total_interactions&period=day&metric_type=total_value&since=${desde}&until=${agora}&access_token=${encodeURIComponent(tokenDaConta)}`
+    );
+    resultado.contasEngajadas = lerValorTotal(dadosValorTotal, "accounts_engaged");
+    resultado.interacoesTotais = lerValorTotal(dadosValorTotal, "total_interactions");
+  } catch (erro) {
+    console.error("Falha ao buscar insights (valor total) da conta:", erro);
+  }
+
+  try {
+    const dadosDaConta = await buscarComPrazo(
+      `https://graph.facebook.com/${GRAPH_API_VERSION}/${instagramUserId}?fields=followers_count&access_token=${encodeURIComponent(tokenDaConta)}`
+    );
+    resultado.seguidoresAtuais = typeof dadosDaConta?.followers_count === "number" ? dadosDaConta.followers_count : null;
+  } catch (erro) {
+    console.error("Falha ao buscar total atual de seguidores da conta:", erro);
+  }
+
+  return resultado;
+}

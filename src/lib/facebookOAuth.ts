@@ -20,6 +20,13 @@ const GRAPH_API_VERSION = "v21.0";
 // (subscribed_apps confirmava), mas nenhuma mensagem/menção de Story real chegava de verdade —
 // só o token de acesso do usuário não estava completo o suficiente pro Instagram liberar a
 // entrega de mensagens em produção.
+//
+// "instagram_manage_insights" adicionado em 05/10/2026, pros cartões de alcance/engajamento/
+// seguidores da aba Relatórios (ver buscarInsightsDaConta em metaMessaging.ts). IMPORTANTE: contas
+// já conectadas ANTES dessa mudança têm um token sem essa permissão — precisam reconectar (botão
+// "Conectar Instagram" de novo) pra ela passar a valer. Mesma ressalva de sempre: se o App ainda
+// não tiver Acesso Avançado aprovado pra essa permissão especificamente, ela só funciona de verdade
+// pra contas com algum papel (admin/dev/tester) no App — ver histórico de instagram_manage_messages.
 const ESCOPOS = [
   "pages_show_list",
   "pages_read_engagement",
@@ -28,6 +35,7 @@ const ESCOPOS = [
   "instagram_basic",
   "instagram_manage_messages",
   "instagram_content_publish",
+  "instagram_manage_insights",
 ].join(",");
 
 function urlBaseDoApp(): string {

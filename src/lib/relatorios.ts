@@ -1,7 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buscarResumoDeAtendimentos } from "./atendimentos";
 import { enviarEmailComAnexos } from "./email";
-import { gerarPdfDeMencoes, gerarPdfDeAtendimentos, type LinhaDeDetalheDeMencao } from "./pdfRelatorio";
+import { gerarPdfDeMencoes, gerarPdfDeAtendimentos, type LinhaDeDetalheDeMencao, type InsightsParaPdf } from "./pdfRelatorio";
+import { buscarInsightsDaConta } from "./metaMessaging";
+
+// Período dos números de alcance/engajamento/seguidores no PDF por e-mail — sempre 30 dias, igual
+// ao botão manual de envio e ao ciclo automático (que na prática também gira perto disso), em vez
+// de tentar casar com o período exato (variável) do resumo de menções desse e-mail especificamente.
+const DIAS_DE_INSIGHTS_NO_EMAIL = 30;
 
 const DIAS_ENTRE_EXPORTACOES = 30;
 
@@ -166,6 +172,26 @@ async function buscarNomeDoShopping(admin: SupabaseClient, shoppingId: string): 
   return shopping?.nome ?? "Shopping";
 }
 
+// Melhor esforço — sem conta conectada, ou com a permissão de insights faltando (token antigo),
+// devolve null e o PDF simplesmente sai sem essa seção (ver gerarPdfDeMencoes).
+async function buscarInsightsParaEmail(
+  admin: SupabaseClient,
+  shoppingId: string
+): Promise<InsightsParaPdf | null> {
+  const { data: conta } = await admin
+    .from("shoppinghub_contas")
+    .select("instagram_user_id, access_token")
+    .eq("shopping_id", shoppingId)
+    .eq("active", true)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!conta) return null;
+
+  return buscarInsightsDaConta(conta.access_token, conta.instagram_user_id, DIAS_DE_INSIGHTS_NO_EMAIL);
+}
+
 function sufixoDoArquivo(periodoInicio: Date, periodoFim: Date): string {
   return `${periodoInicio.toISOString().slice(0, 10)}_a_${periodoFim.toISOString().slice(0, 10)}.pdf`;
 }
@@ -195,12 +221,14 @@ export async function enviarRelatorioDeMencoesPorEmail(
     publicadoEm: m.publicado_em,
     status: m.status,
   }));
+  const insights = await buscarInsightsParaEmail(admin, shoppingId);
 
   const pdf = await gerarPdfDeMencoes({
     shoppingNome: nomeDoShopping,
     periodoTexto: periodoFormatado,
     ...resumo,
     detalhes,
+    insights,
   });
 
   return enviarEmailComAnexos({

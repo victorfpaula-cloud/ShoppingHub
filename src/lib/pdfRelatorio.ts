@@ -328,6 +328,19 @@ function finalizarPdf(doc: Documento): Promise<Buffer> {
   });
 }
 
+export type InsightsParaPdf = {
+  alcance: number | null;
+  visualizacoesDoPerfil: number | null;
+  contasEngajadas: number | null;
+  interacoesTotais: number | null;
+  novosSeguidores: number | null;
+  seguidoresAtuais: number | null;
+};
+
+function formatarNumeroPdf(valor: number | null): string {
+  return valor === null ? "—" : new Intl.NumberFormat("pt-BR").format(valor);
+}
+
 export async function gerarPdfDeMencoes(opts: {
   shoppingNome: string;
   periodoTexto: string;
@@ -337,6 +350,7 @@ export async function gerarPdfDeMencoes(opts: {
   erros: number;
   ranking: LinhaDeRanking[];
   detalhes: LinhaDeDetalheDeMencao[];
+  insights?: InsightsParaPdf | null;
 }): Promise<Buffer> {
   const doc = new PDFDocument({ size: "A4", margin: 0, bufferPages: true });
 
@@ -345,6 +359,22 @@ export async function gerarPdfDeMencoes(opts: {
     shoppingNome: opts.shoppingNome,
     periodoTexto: opts.periodoTexto,
   });
+
+  // Insights da conta do Instagram (alcance/engajamento/seguidores) — mesmos números da aba
+  // Relatórios do painel (ver buscarInsightsDaConta em metaMessaging.ts). Opcional: null quando a
+  // conta não tem permissão de insights ainda (precisa reconectar) ou não tem conta conectada.
+  if (opts.insights) {
+    doc.fillColor(COR_TEXTO_PRINCIPAL).font("Helvetica-Bold").fontSize(12).text("Insights da conta", MARGEM, y, {
+      lineBreak: false,
+    });
+    y += 24;
+    y = desenharCartoesDeEstatistica(doc, y, [
+      { rotulo: "Alcance", valor: formatarNumeroPdf(opts.insights.alcance), cor: "#7c6ef2" },
+      { rotulo: "Visualiz. do perfil", valor: formatarNumeroPdf(opts.insights.visualizacoesDoPerfil), cor: "#7c6ef2" },
+      { rotulo: "Contas engajadas", valor: formatarNumeroPdf(opts.insights.contasEngajadas), cor: "#7c6ef2" },
+      { rotulo: "Novos seguidores", valor: formatarNumeroPdf(opts.insights.novosSeguidores), cor: "#34d399" },
+    ]);
+  }
 
   y = desenharCartoesDeEstatistica(doc, y, [
     { rotulo: "Publicados", valor: opts.publicados, cor: "#34d399" },

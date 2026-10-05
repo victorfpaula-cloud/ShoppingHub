@@ -1,11 +1,21 @@
 import { criarClienteAdmin } from "@/lib/supabase/admin";
 import { inicioDoDiaBrasiliaISO } from "@/lib/mencoesConstantes";
+import { buscarInsightsDaConta, type InsightsDaConta } from "@/lib/metaMessaging";
 import { DiaDeMencoesAccordion } from "@/components/DiaDeMencoesAccordion";
 import { BotaoEnviarRelatorioPorEmail } from "@/components/BotaoEnviarRelatorioPorEmail";
 
 export const dynamic = "force-dynamic";
 
 const DIAS_NO_DETALHAMENTO = 30;
+
+const OPCOES_DE_PERIODO_INSIGHTS = [
+  { chave: "15", rotulo: "15 dias" },
+  { chave: "30", rotulo: "30 dias" },
+] as const;
+
+function formatarNumero(valor: number | null): string {
+  return valor === null ? "—" : new Intl.NumberFormat("pt-BR").format(valor);
+}
 
 function formatarDataLonga(iso: string): string {
   return new Intl.DateTimeFormat("pt-BR", {
@@ -44,9 +54,26 @@ export default async function RelatoriosDeMencoesPage({
   searchParams,
 }: {
   params: { id: string };
-  searchParams: { periodo?: string; email?: string };
+  searchParams: { periodo?: string; email?: string; periodoInsights?: string };
 }) {
   const admin = criarClienteAdmin();
+
+  const periodoInsights = OPCOES_DE_PERIODO_INSIGHTS.some((o) => o.chave === searchParams.periodoInsights)
+    ? searchParams.periodoInsights!
+    : "30";
+
+  const { data: conta } = await admin
+    .from("shoppinghub_contas")
+    .select("instagram_user_id, access_token")
+    .eq("shopping_id", params.id)
+    .eq("active", true)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const insights: InsightsDaConta | null = conta
+    ? await buscarInsightsDaConta(conta.access_token, conta.instagram_user_id, Number(periodoInsights))
+    : null;
 
   const { data: lojas } = await admin
     .from("shoppinghub_lojas")
@@ -165,6 +192,74 @@ export default async function RelatoriosDeMencoesPage({
           corretamente e veja os logs da Vercel pra mais detalhes.
         </div>
       )}
+
+      {/* Insights da conta do Instagram (alcance, engajamento, seguidores) */}
+      <div className="mt-7 rounded-2xl border border-white/8 bg-ink-900 p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h3 className="text-[13.5px] font-bold text-neutral-200">Insights da conta</h3>
+          <div className="flex shrink-0 items-center gap-1.5 rounded-full border border-white/10 p-1">
+            {OPCOES_DE_PERIODO_INSIGHTS.map((opcao) => (
+              <a
+                key={opcao.chave}
+                href={`?periodo=${chavePeriodo}&periodoInsights=${opcao.chave}`}
+                className={`rounded-full px-3 py-1 text-[11.5px] font-bold transition ${
+                  periodoInsights === opcao.chave
+                    ? "bg-accent text-white"
+                    : "text-neutral-400 hover:text-neutral-200"
+                }`}
+              >
+                {opcao.rotulo}
+              </a>
+            ))}
+          </div>
+        </div>
+
+        {!conta ? (
+          <p className="mt-4 rounded-xl border border-dashed border-white/12 px-4 py-5 text-center text-sm text-neutral-400">
+            Conecte uma conta do Instagram pra ver os insights.
+          </p>
+        ) : (
+          <>
+            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <div className="rounded-xl border border-white/8 bg-ink-850 p-4">
+                <p className="text-[11px] font-semibold text-neutral-400">Alcance</p>
+                <p className="font-display mt-1.5 text-2xl font-bold">{formatarNumero(insights!.alcance)}</p>
+              </div>
+              <div className="rounded-xl border border-white/8 bg-ink-850 p-4">
+                <p className="text-[11px] font-semibold text-neutral-400">Visualizações do perfil</p>
+                <p className="font-display mt-1.5 text-2xl font-bold">
+                  {formatarNumero(insights!.visualizacoesDoPerfil)}
+                </p>
+              </div>
+              <div className="rounded-xl border border-white/8 bg-ink-850 p-4">
+                <p className="text-[11px] font-semibold text-neutral-400">Contas engajadas</p>
+                <p className="font-display mt-1.5 text-2xl font-bold">{formatarNumero(insights!.contasEngajadas)}</p>
+              </div>
+              <div className="rounded-xl border border-white/8 bg-ink-850 p-4">
+                <p className="text-[11px] font-semibold text-neutral-400">Interações totais</p>
+                <p className="font-display mt-1.5 text-2xl font-bold">{formatarNumero(insights!.interacoesTotais)}</p>
+              </div>
+              <div className="rounded-xl border border-white/8 bg-ink-850 p-4">
+                <p className="text-[11px] font-semibold text-neutral-400">Novos seguidores</p>
+                <p className="font-display mt-1.5 text-2xl font-bold text-ok">
+                  {formatarNumero(insights!.novosSeguidores)}
+                </p>
+              </div>
+              <div className="rounded-xl border border-white/8 bg-ink-850 p-4">
+                <p className="text-[11px] font-semibold text-neutral-400">Seguidores (atual)</p>
+                <p className="font-display mt-1.5 text-2xl font-bold">{formatarNumero(insights!.seguidoresAtuais)}</p>
+              </div>
+            </div>
+
+            {Object.values(insights!).every((v) => v === null) && (
+              <p className="mt-3 text-xs text-neutral-500">
+                Nenhum número disponível ainda — se a conta foi conectada antes de 05/10/2026,
+                reconecte-a (aba "Conta do Instagram") pra habilitar a permissão de insights.
+              </p>
+            )}
+          </>
+        )}
+      </div>
 
       {/* Resumo do período escolhido */}
       <div className="mt-7 rounded-2xl border border-white/8 bg-ink-900 p-5">
