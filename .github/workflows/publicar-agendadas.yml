@@ -1,0 +1,28 @@
+name: Publicar agendadas (Feed/Stories)
+
+# Mesmo padrão do publicar-mencoes.yml — roda de 5 em 5 minutos, batendo no endpoint que publica
+# toda publicação agendada (Feed ou Story) cujo horário já chegou. `schedule` fica como reforço
+# (a Vercel Hobby só permite cron 1x/dia, e o `schedule` do próprio GitHub Actions pode atrasar sob
+# carga — ver incidente de 19/09/2026); o disparo confiável de verdade é externo, via cron-job.org
+# chamando a API de workflow_dispatch do GitHub a cada 5 minutos.
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Chamar /api/cron/publicar-agendadas
+        run: |
+          resposta=$(curl -sS -o /tmp/resposta.json -w "%{http_code}" --max-time 65 \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "https://shoppinghub-hazel.vercel.app/api/cron/publicar-agendadas")
+          echo "Status HTTP: $resposta"
+          cat /tmp/resposta.json
+          echo
+          if [ "$resposta" -ge 400 ]; then
+            echo "Falha ao chamar o endpoint (status $resposta)."
+            exit 1
+          fi

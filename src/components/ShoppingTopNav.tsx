@@ -28,6 +28,13 @@ const ICONE_MENCOES = (
   </Icone>
 );
 const ICONE_RELATORIOS = <Icone><path d="M4 20V10M12 20V4M20 20v-7" /></Icone>;
+const ICONE_PUBLICACOES = (
+  <Icone>
+    <rect x="3" y="3" width="18" height="18" rx="3" />
+    <circle cx="8.5" cy="8.5" r="1.5" />
+    <path d="M21 15l-5-5L5 21" />
+  </Icone>
+);
 const ICONE_ATENDIMENTOS = (
   <Icone>
     <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
@@ -62,6 +69,13 @@ export function ShoppingTopNav({
       labelCurto: "Menções",
       icone: ICONE_MENCOES,
       ativo: pathname.startsWith(`${base}/mencoes`),
+    },
+    {
+      href: `${base}/publicacoes`,
+      label: "Publicações",
+      labelCurto: "Publicar",
+      icone: ICONE_PUBLICACOES,
+      ativo: pathname.startsWith(`${base}/publicacoes`),
     },
     {
       href: `${base}/relatorios`,

@@ -339,3 +339,137 @@ export async function publicarStoryNoInstagram(
 
   return storyMediaId;
 }
+
+/**
+ * Cria um container de mídia (etapa 1 da Content Publishing API) com os campos extras informados
+ * — compartilhado pelas publicações no Feed (item único, item de carrossel, e o container "pai"
+ * do carrossel) e pela Story (ver publicarStoryNoInstagram acima, que mantém a própria cópia por
+ * já existir antes desse compartilhamento).
+ */
+async function criarContainerDeMidia(
+  instagramUserId: string,
+  tokenDaConta: string,
+  camposExtras: Record<string, unknown>,
+  signal?: AbortSignal
+): Promise<string> {
+  const resposta = await fetch(`https://graph.facebook.com/${GRAPH_API_VERSION}/${instagramUserId}/media`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...camposExtras, access_token: tokenDaConta }),
+    cache: "no-store",
+    signal,
+  });
+
+  const corpoBruto = await resposta.text().catch(() => "");
+
+  if (!resposta.ok) {
+    throw new Error(`Falha ao criar container de mídia pro Feed (status ${resposta.status}): ${corpoBruto}`);
+  }
+
+  let dados: any = null;
+  try {
+    dados = JSON.parse(corpoBruto);
+  } catch {
+    // segue com dados null — o texto bruto já aparece na mensagem de erro abaixo, se for o caso
+  }
+
+  const containerId = dados?.id as string | undefined;
+  if (!containerId) {
+    throw new Error(`A Meta não devolveu um ID de container ao criar mídia pro Feed: ${corpoBruto}`);
+  }
+
+  return containerId;
+}
+
+async function publicarContainerNoFeed(
+  instagramUserId: string,
+  tokenDaConta: string,
+  containerId: string,
+  signal?: AbortSignal
+): Promise<string> {
+  const resposta = await fetch(
+    `https://graph.facebook.com/${GRAPH_API_VERSION}/${instagramUserId}/media_publish`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ creation_id: containerId, access_token: tokenDaConta }),
+      cache: "no-store",
+      signal,
+    }
+  );
+
+  if (!resposta.ok) {
+    const corpoErro = await resposta.text().catch(() => "");
+    throw new Error(`Falha ao publicar no Feed (status ${resposta.status}): ${corpoErro}`);
+  }
+
+  const dados = await resposta.json();
+  const mediaId = dados?.id as string | undefined;
+
+  if (!mediaId) {
+    throw new Error("A Meta não devolveu um ID de mídia ao publicar no Feed.");
+  }
+
+  return mediaId;
+}
+
+/**
+ * Publica no Feed da conta do Instagram do shopping — uma imagem/vídeo único, ou um carrossel
+ * (`midias` com mais de um item, até o limite de 10 da própria Meta — ver MAX_ITENS_CARROSSEL em
+ * publicacoesConstantes.ts). Mesmas três etapas da Content Publishing API usadas em
+ * publicarStoryNoInstagram (criar container → esperar FINISHED → publicar), só que pra carrossel
+ * tem uma etapa a mais no meio: cada item vira um container "filho" (`is_carousel_item: true`),
+ * TODOS precisam chegar em FINISHED antes de criar o container "pai" (`media_type: "CAROUSEL"`,
+ * `children`), que aí sim é o que se publica no final.
+ *
+ * Vídeo no Feed/carrossel usa `media_type: "REELS"` — diferente da Story (`"STORIES"`) e do
+ * item de carrossel (vídeo de carrossel não leva media_type nenhum, só `video_url`; é o
+ * `is_carousel_item: true` que já diz à Meta o que fazer com ele).
+ */
+export async function publicarNoFeedInstagram(
+  tokenDaConta: string,
+  instagramUserId: string,
+  midias: { urlPublica: string; tipo: "IMAGE" | "VIDEO" }[],
+  signal?: AbortSignal
+): Promise<string> {
+  if (midias.length === 0) {
+    throw new Error("Nenhuma mídia informada pra publicar no Feed.");
+  }
+
+  if (midias.length === 1) {
+    const midia = midias[0];
+    const camposDeMidia =
+      midia.tipo === "VIDEO"
+        ? { video_url: midia.urlPublica, media_type: "REELS" }
+        : { image_url: midia.urlPublica };
+
+    const containerId = await criarContainerDeMidia(instagramUserId, tokenDaConta, camposDeMidia, signal);
+    await aguardarContainerPronto(containerId, tokenDaConta, midia.tipo, signal);
+    return publicarContainerNoFeed(instagramUserId, tokenDaConta, containerId, signal);
+  }
+
+  const idsDosFilhos: string[] = [];
+  for (const midia of midias) {
+    const camposDoFilho = {
+      is_carousel_item: true,
+      ...(midia.tipo === "VIDEO" ? { video_url: midia.urlPublica } : { image_url: midia.urlPublica }),
+    };
+    const containerId = await criarContainerDeMidia(instagramUserId, tokenDaConta, camposDoFilho, signal);
+    await aguardarContainerPronto(containerId, tokenDaConta, midia.tipo, signal);
+    idsDosFilhos.push(containerId);
+  }
+
+  const containerPaiId = await criarContainerDeMidia(
+    instagramUserId,
+    tokenDaConta,
+    { media_type: "CAROUSEL", children: idsDosFilhos.join(",") },
+    signal
+  );
+  // Usa o prazo de VIDEO se qualquer item do carrossel for vídeo — mesmo os filhos já estando em
+  // FINISHED antes de chegar aqui, o container PAI do carrossel ainda processa de novo por cima
+  // (mais demorado quando mistura/contém vídeo).
+  const prazoDoContainerPai = midias.some((m) => m.tipo === "VIDEO") ? "VIDEO" : "IMAGE";
+  await aguardarContainerPronto(containerPaiId, tokenDaConta, prazoDoContainerPai, signal);
+
+  return publicarContainerNoFeed(instagramUserId, tokenDaConta, containerPaiId, signal);
+}

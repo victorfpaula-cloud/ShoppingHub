@@ -293,3 +293,52 @@ alter table shoppinghub_exportacoes_mencoes enable row level security;
 insert into storage.buckets (id, name, public)
 values ('shoppinghub-relatorios', 'shoppinghub-relatorios', false)
 on conflict (id) do nothing;
+
+-- ============================================================================
+-- Publicações agendadas (Feed e Stories) — conteúdo próprio do shopping (artes/vídeos
+-- promocionais), diferente de shoppinghub_mencoes (que é repostagem de menção de Story de
+-- lojista). Uma linha por item agendado.
+--
+-- Story: tem período (data_inicio..data_fim) porque um Story some em 24h — pra ficar no ar o
+-- período inteiro, o cron republica o MESMO arquivo todo dia no horário escolhido, até o último
+-- dia (ver data_fim_instante, usado pelo cron pra saber quando parar).
+-- Feed: publicação única (data_inicio = a única data; data_fim/data_fim_instante ficam null),
+-- aceita 1 arquivo ou vários (carrossel).
+-- ============================================================================
+create table if not exists shoppinghub_publicacoes (
+  id uuid primary key default gen_random_uuid(),
+  conta_id uuid not null references shoppinghub_contas(id) on delete cascade,
+  tipo text not null check (tipo in ('story', 'feed')),
+
+  -- [{ "storage_path": "...", "tipo": "IMAGE"|"VIDEO" }, ...] — na ordem de publicação/carrossel.
+  -- Story sempre tem exatamente 1 item; Feed pode ter vários (carrossel, até 10 — limite da Meta).
+  midias jsonb not null,
+
+  horario time not null, -- horário do dia (America/Sao_Paulo) em que publica
+  data_inicio date not null, -- feed: data única da publicação; story: primeiro dia do período
+  data_fim date, -- só story (último dia do período) — null pro feed
+  data_fim_instante timestamptz, -- só story: instante (UTC) do ÚLTIMO disparo permitido (data_fim + horario) — null pro feed
+
+  status text not null default 'agendado'
+    check (status in ('agendado', 'publicando', 'publicado', 'concluido', 'erro', 'cancelado')),
+
+  proxima_publicacao_em timestamptz not null, -- próximo instante em que o cron deve publicar
+  tentativas integer not null default 0, -- tentativas automáticas do disparo ATUAL (zera a cada dia novo, no caso do story)
+  tentativa_iniciada_em timestamptz,
+  ultima_publicacao_em timestamptz,
+  erro_detalhe text,
+
+  criado_em timestamptz not null default now()
+);
+
+create index if not exists shoppinghub_publicacoes_conta_idx on shoppinghub_publicacoes(conta_id);
+create index if not exists shoppinghub_publicacoes_status_idx
+  on shoppinghub_publicacoes(status, proxima_publicacao_em);
+
+alter table shoppinghub_publicacoes enable row level security;
+
+-- Bucket PÚBLICO — mesmo motivo do shoppinghub-mencoes: a Content Publishing API da Meta exige
+-- uma image_url/video_url acessível publicamente na internet.
+insert into storage.buckets (id, name, public)
+values ('shoppinghub-publicacoes', 'shoppinghub-publicacoes', true)
+on conflict (id) do nothing;
